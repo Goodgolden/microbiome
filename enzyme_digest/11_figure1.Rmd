@@ -1,0 +1,25 @@
+---
+title: "Untitled"
+author: "Randy"
+date: "9/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Figure3B, fig.height=8, fig.width=10}
+Plot_B <- ggplot(data = Dat_genera) +
+  geom_boxplot( aes(Method, value, fill = Method), 
+                show.legend = F) +
+  theme_bw() +
+  ggthemes::scale_fill_wsj("colors6") +
+  xlab("Methods") +
+  scale_x_discrete(labels = c("C" = "OP", "E" = "SP")) +
+  ylab("Genera") +
+  facet_wrap(~ variable, nrow = 3, scales = 'free_y') 
+
+Plot_B
+```
+

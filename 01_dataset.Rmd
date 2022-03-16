@@ -1,0 +1,170 @@
+---
+title: "00_import_data"
+author: "Randy"
+date: "9/22/2020"
+output: html_document
+---
+
+```{r "setup", include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  message=FALSE, 
+  warning=FALSE)
+
+rm(list=ls())
+graphics.off()
+```
+
+```{r "import packages", include=FALSE}
+## for table1s
+library(gtsummary)
+library(flextable)
+
+## data cleaning
+library(tidyverse)
+library(Hmisc)
+library(here)
+library(janitor)
+```
+
+```{r "import datasets", include=FALSE}
+## import raw data ------------------------------------------
+count_raw <- 
+  here::here("seven_twenty_four", 
+             "data", 
+             "724_counts.txt") %>%
+  read_delim(delim = "\t",
+             escape_double = FALSE,
+             trim_ws = TRUE) %>%
+  column_to_rownames("OTU_Name")
+
+
+## remove the unwanted from root
+count_raw["root",] <-
+  count_raw["root", ] -
+  count_raw["Unclassified", ] -
+  count_raw["Bacteria", ]
+ 
+
+## clear up counting data-----------------------------------
+count <- count_raw %>%
+  filter(rownames(.) != "Unclassified") %>%
+  ## remove "Unclassified"
+  filter(rownames(.) != "Bacteria") %>%
+  ## remove "Bacteria"
+  t() %>%
+  ## transpose the data.frame
+  as.data.frame()
+  ## after the t() function
+  ## the data frame is in matrix form
+
+
+## calculate relative abundance-----------------------------
+ra <- count %>%
+  rownames_to_column("Sample") %>%
+  mutate_at(vars(-Sample, -root), 
+            funs(. / root)) %>%
+  ## only change the counting numbers
+  column_to_rownames("Sample") %>%
+  select(-root) %>%
+  t() %>%
+  ## transpose the data.frame
+  as.data.frame() %>%
+  ## after the t() function
+  ## the data frame is in matrix form
+  rownames_to_column("OTU_Name") %>%
+  separate("OTU_Name",
+    into = c("D", "P", "C", "O", "F", "G", "S"),
+    sep = "/") %>%
+  ## Kingdom, Phylum, Class, Order
+  ## Family, Genus, Species
+  ## Some of the levels will be empty
+  ## warnings will show
+  unite("OTU_Name", c("P", "C", "O", "F", "G", "S"),
+    sep = "/") %>%
+  mutate(OTU_Name = str_replace_all(OTU_Name, "/NA", "")) %>%
+  ## change the OTU_Name in good format
+  column_to_rownames("OTU_Name") %>%
+  select(-D) %>%
+  ## The bacteria domain level
+  ## not very useful for the tree
+  t() %>%
+  ## transpose the data.frame
+  as.data.frame()
+  ## after the t() function
+  ## the data frame is in matrix form
+
+
+## meta for subject personal information----------------------
+meta <- 
+  here::here("seven_twenty_four", 
+             "data", "724_meta.csv") %>%
+  read_csv() %>%
+  select(SYSID, PatNo, everything())
+
+
+## the fev slopes data for lung function----------------------
+pft <-   
+  here::here("seven_twenty_four", 
+             "data", "pft_slopes2.csv") %>%
+  read_csv()
+
+
+## alpha diversity for the sequencing-------------------------
+alpha <- 
+  here::here("seven_twenty_four", 
+             "data", "alpha_724") %>%
+  read_delim(delim =  "\t",
+             escape_double = FALSE, 
+             trim_ws = TRUE)
+
+
+## save tidy datasets in new_data-----------------------------
+write.csv(ra, "new_data/724_relative_abundance.csv")
+```
+
+```{r "merge datasets", message=FALSE, warning=FALSE}
+meta_pft <- full_join(pft, meta) %>%
+  filter(!is.na(.$SYSID)) 
+  
+merge <- ra %>%
+  rownames_to_column("Lib") %>%
+  left_join(meta_pft, .) %>%
+  column_to_rownames("Lib")
+
+eligible_ID <- merge %>%
+  filter(!is.na(.$MoledularID)) %>%
+  group_by("SYSID") %>%
+  summarize(by = .$SYSID, nrow) %>%
+  filter(`.` == 4) %>%
+  select(1) %>%
+  unlist()
+
+eligible_Lib <- meta %>%
+  filter(SYSID %in% eligible_ID) %>%
+  select(Lib) %>%
+  unlist()
+
+
+ra_eligible <- ra %>%
+  filter(rownames(.) %in% eligible_Lib)
+
+alpha_eligible <- alpha %>%
+  filter(Collection %in% eligible_Lib) %>%
+  column_to_rownames("Collection")
+
+pft_eligible <- pft %>%
+  filter(SYSID %in% eligible_ID) 
+
+merge_eligible <- merge %>%
+  filter(rownames(.) %in% eligible_Lib) %>%
+  filter(!is.na(SYSID))
+
+
+## save tidy datasets in new_data -----------------------------
+write.csv(eligible_Lib, "new_data/724_eligible_lib.csv")
+write.csv(alpha_eligible, "new_data/724_alpha_eligible.csv")
+write.csv(merge_eligible, "new_data/724_merge_eligible.csv")
+
+```
+

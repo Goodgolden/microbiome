@@ -1,0 +1,217 @@
+---
+title: "09_results"
+author: "Randy"
+date: "2/9/2021"
+output: 
+  word_document:
+    reference_docx: template.docx
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(forcats)
+library(ggthemes)
+library(scales)
+library(pheatmap)
+library(RColorBrewer)
+
+library(rstan)
+library(brms)
+library(bayesplot)
+library(loo)
+library(HDInterval)
+library(shinystan)
+library(rstanarm)
+
+R.Version()
+rstan::stan_version()
+```
+
+```{r}
+load("new_data/stan_trio_20210209.Rdata")
+load("new_data/stan_three_20210209.Rdata")
+load("new_data/stan_sta_20210209.Rdata")
+load("new_data/stan_hae_20210209.Rdata")
+load("stan_pse_20210209.Rdata")
+```
+
+
+```{r fig.height=8, fig.width=6}
+stan_trace(stan_trio, 
+           pars = "beta", 
+           inc_warmup = TRUE, 
+           nrow = 5,
+           ncol = 2)
+```
+
+```{r fig.height=2, fig.width=6}
+stan_trace(stan_sta, 
+           pars = "beta", 
+           inc_warmup = TRUE, 
+           nrow = 10,
+           ncol = 2)
+
+stan_trace(stan_hae, 
+           pars = "beta", 
+           inc_warmup = TRUE, 
+           nrow = 10,
+           ncol = 2)
+
+stan_trace(stan_pse, 
+           pars = "beta", 
+           inc_warmup = TRUE, 
+           nrow = 10,
+           ncol = 2)
+```
+
+
+
+```{r}
+stan_plot(stan_trio,
+          pars = c("beta"),
+          widths = c(1, 1.5),
+          theme = theme_bw(base_size = 16))
+
+stan_plot(stan_sta,
+          pars = c("alpha", "beta"),
+          widths = c(1, 1.5),
+          theme = theme_bw(base_size = 16))
+
+stan_plot(stan_hae,
+          pars = c("alpha", "beta"),
+          widths = c(1, 1.5),
+          theme = theme_bw(base_size = 16))
+
+stan_plot(stan_pse,
+          pars = c("alpha", "beta"),
+          widths = c(1, 1.5),
+          theme = theme_bw(base_size = 16))
+
+prior_summary(stan_trio)
+```
+
+
+```{r}
+# S3 method for stanfit
+result_sta <- 
+  broom.mixed::tidyMCMC(
+  stan_sta,
+  conf.int = TRUE,
+  conf.level = 0.95,
+  effects = "fixed") %>%
+  tibble() %>%
+  mutate(model = "stan_sta")
+
+result_pse <- 
+  broom.mixed::tidyMCMC(
+  stan_pse,
+  conf.int = TRUE,
+  conf.level = 0.95,
+  effects = "fixed") %>%
+  tibble() %>%
+  mutate(model = "stan_pse")
+
+result_hae <- 
+  broom.mixed::tidyMCMC(
+  stan_hae,
+  conf.int = TRUE,
+  conf.level = 0.95,
+  effects = "fixed") %>%
+  tibble() %>%
+  mutate(model = "stan_hae")
+  
+
+
+```
+
+```{r}
+result_trio <- 
+  broom.mixed::tidyMCMC(
+  stan_trio,
+  conf.int = TRUE,
+  conf.level = 0.95,
+  effects = "fixed") %>%
+  tibble() 
+
+result_trio
+
+table_trio <- 
+  result_trio[1:9, ] %>%
+  column_to_rownames("term") %>%
+  t() %>%
+  as.data.frame() %>% 
+  mutate(`age_sta` = age + `age:speciesStaphylococcus`,
+         `age_hae` = age,
+         `age_pse` = age + `age:speciesPseudomonasplus`,
+         `elast_sta` = `scale(elast)` + `scale(elast):speciesStaphylococcus`,
+         `elast_hae` = `scale(elast)`,
+         `elast_pse` = `scale(elast)` + `scale(elast):speciesPseudomonasplus`) %>%
+  select(contains(c("age_", "elast_")), 
+         `(Int)_hae` = speciesHaemophilus, 
+         `(Int)_pse` = speciesPseudomonasplus, 
+         `(Int)_sta` = speciesStaphylococcus) %>%
+  t() %>%
+  as.data.frame() %>%
+  mutate(model = "stan_trio") %>%
+  rownames_to_column("term") %>%
+  arrange(term) %>%
+  select(model, term, estimate)
+```
+
+
+```{r}
+table <- rbind(result_sta,
+      result_pse,
+      result_hae) %>%
+  filter(term %in% c("(Intercept)", "age", "scale(elast)")) %>%
+  select(model, term, estimate) %>%
+  arrange(term)
+cbind(table,table_trio,
+table_three)
+```
+
+
+```{r}
+result_three <- 
+  broom.mixed::tidyMCMC(
+  stan_three,
+  conf.int = TRUE,
+  conf.level = 0.95,
+  effects = "fixed") %>%
+  tibble() 
+
+result_three
+
+table_three <- 
+  result_three[1:9, ] %>%
+  column_to_rownames("term") %>%
+  t() %>%
+  as.data.frame() %>% 
+  mutate(`age_sta` = age + `age:speciesStaphylococcus`,
+         `age_hae` = age,
+         `age_pse` = age + `age:speciesPseudomonasplus`,
+         `elast_sta` = `scale(elast)` + `scale(elast):speciesStaphylococcus`,
+         `elast_hae` = `scale(elast)`,
+         `elast_pse` = `scale(elast)` + `scale(elast):speciesPseudomonasplus`) %>%
+  select(contains(c("age_", "elast_")), 
+         `(Int)_hae` = speciesHaemophilus, 
+         `(Int)_pse` = speciesPseudomonasplus, 
+         `(Int)_sta` = speciesStaphylococcus) %>%
+  t() %>%
+  as.data.frame() %>%
+  mutate(model = "stan_three") %>%
+  rownames_to_column("term") %>%
+  arrange(term) %>%
+  select(model, term, estimate)
+   
+table_three
+```
+
+
+
+
+
+

@@ -1,0 +1,41 @@
+---
+title: "13 Figure2"
+author: "Randy"
+date: "9/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Figure2, fig.height = 6, fig.width = 4}
+
+Plot_P <- ggplot(MH) +
+  geom_jitter(aes(Method, MH, col = Method), 
+              size = 2, 
+              width = .25, 
+              show.legend = F) +
+  geom_boxplot(aes(x = Method, y = MH, fill = Method), 
+               show.legend = F) +
+  ylab("MH between Pairs") + 
+  xlab("Method") +
+  theme_bw() +
+  scale_x_discrete(labels = c("C" = "OP", 
+                              "E" = "SP")) +
+  ggthemes::scale_fill_wsj("colors6") +
+  ggthemes::scale_color_wsj("colors6") +
+  # theme(text = element_text(size=10),
+  #       axis.line = element_line(colour = "black"),
+  #       panel.grid.major = element_blank(),
+  #       panel.grid.minor = element_blank(),
+  #       panel.border = element_rect(colour = "black"),
+  #       panel.background = element_blank()) +
+  ggtitle("Boxplot of Morisita-Horn", 
+          "Similarity metric for paired OP and SP") 
+
+Plot_P
+
+```
+
+

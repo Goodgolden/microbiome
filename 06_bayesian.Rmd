@@ -1,0 +1,453 @@
+---
+title: "06_bayesian"
+author: "Randy"
+date: "12/4/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      cache = TRUE)
+
+library(tidyverse)
+library(forcats)
+library(ggthemes)
+library(scales)
+library(pheatmap)
+library(RColorBrewer)
+
+library(rstan)
+library(brms)
+library(bayesplot)
+library(loo)
+library(HDInterval)
+library(shinystan)
+library(rstanarm)
+
+R.Version()
+rstan::stan_version()
+```
+
+
+```{r "functions"}
+## a function from Kayla
+## only keep the last level 
+## of the OTU_Names
+#' @param names name needs to be simplified
+#' @return the simplified names 
+ 
+name_split <- function(names){
+              save=strsplit(names,"/")
+              h=0
+              for(i in 1:length(names)){
+                h[i]=length(save[[i]])}
+              i=0
+              name.list=NULL
+              for(i in 1:length(save)){
+                name.list[i]=save[[i]][h[i]]}
+              return(name.list)
+              }
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ra <- 
+  here::here("seven_twenty_four", 
+             "new_data",
+             "724_relative_abundance.csv") %>%
+  read.csv(row.names = 1, 
+           check.names = FALSE)
+
+count <- 
+  here::here("seven_twenty_four", 
+             "data",
+             "724_counts.txt") %>%
+  read_delim("\t", 
+             escape_double = FALSE, 
+             trim_ws = TRUE) %>%
+  column_to_rownames("OTU_Name")
+
+meta <- 
+  here::here("seven_twenty_four", 
+             "data",
+             "724_meta.csv") %>%
+  read_csv() %>%
+  select(SYSID, PatNo, everything())
+
+pft <- 
+  here::here("seven_twenty_four", 
+             "data",
+             "pft_slopes2.csv") %>%
+  read_csv()
+
+alpha <- 
+  here::here("seven_twenty_four", 
+             "data",
+             "alpha_724") %>%
+  read_delim("\t",
+             escape_double = FALSE,
+             trim_ws = TRUE)
+
+eligible_Lib <- 
+  here::here("seven_twenty_four", 
+             "data",
+             "724_eligiable_lib.csv") %>%
+  read.csv(row.names = 1) %>%
+  unlist() %>%
+  na.omit()
+```
+
+
+```{r}
+max_ra <- map(ra, max)
+ra_top <- ra %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column("OTU_names") %>%
+  mutate(max = max_ra,
+         OTU_names = OTU_names %>%
+                     name_split() ) %>%
+  filter(max > 0.2) %>%
+  select(-max) %>%
+  as.data.frame() %>%
+  remove_rownames() %>%
+  column_to_rownames("OTU_names") %>%
+  t() %>%
+  as.data.frame()
+
+count_top <- count %>%
+  filter(Total > 100000) %>%
+  rownames_to_column("OTU_names") %>%
+  mutate(OTU_names = name_split(OTU_names)) %>%
+  column_to_rownames("OTU_names") %>%
+  t() %>%
+  as.data.frame()
+
+meta_pft <- full_join(pft, meta) %>%
+  filter(!is.na(.$SYSID)) 
+
+```
+
+
+```{r}
+merge_ra_eligible <- ra_top %>%
+  rownames_to_column("Lib") %>%
+  left_join(meta_pft, .) %>%
+  column_to_rownames("Lib") %>%
+  filter(rownames(.) %in% eligible_Lib)
+
+merge_count_eligible <- count_top %>%
+  rownames_to_column("Lib") %>%
+  left_join(meta_pft, .) %>%
+  column_to_rownames("Lib") %>%
+  filter(rownames(.) %in% eligible_Lib)
+
+```
+
+
+
+```{r}
+fev_ra <- merge_ra_eligible %>%
+  select(SYSID, time = VISITNUM, 
+         fevslope, fefslope, fvcslope,
+         Genotypes1, Genotypes2, 
+         age = AGE_YRS, gender = Gender,
+         elast = ELASFINALCONC, 
+         il1 = IL_1_FINALCONC, 
+         il6 = IL_6FINALCONC, 
+         il8 = IL_8FINALCONC, 
+         il17 = IL_17FINALCONC,
+         mmp9 = MMP9FINALCONC,
+         Prevotella, Gemella, Staphylococcus, 
+         Streptococcus, Veillonella, 
+         Leptotrichia, Inquilinus,
+         Achromobacter, Neisseria, Lysobacter,
+         Haemophilus, Pseudomonasplus, Stenotrophomonas) %>%
+  mutate(genotype = case_when((Genotypes1 == 'F508' & 
+                                 Genotypes2 == 'F508') ~ "F508/F508", 
+                              (Genotypes1 == 'F508' & 
+                                 Genotypes2 != 'F508') ~ "F508/Other",
+                              (Genotypes1 != 'F508' & 
+                                 Genotypes2 != 'F508') ~ "Other/Other"))
+
+ra_gather <- fev_ra %>%
+  gather(key = Species, value = RA, 
+         Prevotella:Stenotrophomonas)
+
+
+count_gather <- merge_count_eligible %>%
+  gather(key = Species, value = counting, 
+         Porphyromonas:Stenotrophomonas) %>%
+  mutate(genotype = case_when((Genotypes1 == 'F508' & 
+                                 Genotypes2 == 'F508') ~ "F508/F508", 
+                              (Genotypes1 == 'F508' & 
+                                 Genotypes2 != 'F508') ~ "F508/Other",
+                              (Genotypes1 != 'F508' & 
+                                 Genotypes2 != 'F508') ~ "Other/Other")) %>%
+  select(age = AGE_YRS, 
+         gender = Gender, 
+         elast = ELASFINALCONC, 
+         il1 = IL_1_FINALCONC, 
+         il6 = IL_6FINALCONC, 
+         il8 = IL_8FINALCONC, 
+         il17 = IL_17FINALCONC,
+         mmp9 = MMP9FINALCONC,
+         everything())
+```
+
+
+```{r}
+set.seed(55555)
+
+stan_nb0 <- stan_glmer.nb(counting ~ -1 + age + scale(elast) + 
+                            age * Species + scale(elast) * Species +
+                            (1 + age | SID) +
+                            offset(log(root)),
+                          data = count_gather,
+                          chains = 4, 
+                          iter = 5000,
+                          warmup = 1000,
+                          ## the priors for betas and bs
+                          prior = normal(location = 0,
+                                         scale = NULL, 
+                                         autoscale = TRUE),
+                          ## the prior probably for alpha? 
+                          ## but we did not include it
+                          prior_intercept = normal(location = 0, 
+                                                   scale = NULL, 
+                                                   autoscale = FALSE),
+                          ## the prior for the aux
+                          prior_aux = exponential(rate = 1, 
+                                                  autoscale = TRUE),
+                          ## decomposition of covariance function
+                          ## Cholesky probably?
+                          prior_covariance = decov(),
+                          ## 	a logical scalar (defaulting to FALSE) 
+                          ## 	indicating whether to draw 
+                          ## 	from the prior predictive distribution 
+                          prior_PD = FALSE,
+                          control = list(adapt_delta = 0.95))
+?stan_glmer.nb
+```
+
+
+```{r}
+stan_nb1 <- stan_glmer.nb(counting ~ -1 + age + scale(elast) + 
+                            age * Species + scale(elast) * Species +
+                            (1 + age|SID) + 
+                            (1 + age|SID:Species) +
+                            offset(log(root)),
+                          data = count_gather,
+                          chains = 4, 
+                          iter = 10000,
+                          warmup = 5000,
+                          ## the priors for betas and bs
+                          prior = normal(location = 0,
+                                         scale = NULL, 
+                                         autoscale = TRUE),
+                          ## the prior probably for alpha? 
+                          ## but we did not include it
+                          prior_intercept = normal(location = 0, 
+                                                   scale = NULL, 
+                                                   autoscale = FALSE),
+                          ## the prior for the aux
+                          prior_aux = exponential(rate = 1, 
+                                                  autoscale = TRUE),
+                          ## decomposition of covariance function
+                          ## Cholesky probably?
+                          prior_covariance = decov(),
+                          ## 	a logical scalar (defaulting to FALSE) 
+                          ## 	indicating whether to draw 
+                          ## 	from the prior predictive distribution 
+                          prior_PD = FALSE,
+                          control = list(adapt_delta = 0.95))
+
+save(stan_nb1, file = "stan_nb1_20210128.Rdata")
+```
+
+```{r fig.height=20, fig.width=15}
+stan_trace(stan_nb1, 
+           pars = "beta", 
+           inc_warmup = TRUE, 
+           nrow = 10,
+           ncol = 5)
+```
+```{r fig.height=60, fig.width=15}
+load("stan_nb1_20210128.Rdata")
+
+## to open the html stan API
+launch_shinystan(stan_nb1)
+
+plot_nb1 <- stan_trace(stan_nb1, 
+           pars = "b", 
+           inc_warmup = TRUE, 
+           nrow = 100,
+           ncol = 10) +
+  ## only three options div, seq, or qual
+  # scale_color_brewer(type = "seq") +
+  theme(legend.position = "none")
+
+plot_nb1
+
+ggsave("stan_nb1_b_effect.png",
+       width = 20, height = 50, 
+       dpi = 150, units = "in", 
+       device='png', limitsize = FALSE)
+```
+
+
+
+This is the frequentist view
+$$\mathbf{log(\mu)} \thicksim \mathcal{N}
+\left(\alpha + \mathbf{X}\boldsymbol{\beta}, \ 
+\sigma^2 \mathbf{I}+\mathbf{Z}^\top 
+\boldsymbol{\Sigma} \mathbf{Z} \right)$$
+
+
+This is the bayesian view
+$$\mathbf{log(\mu)} \thicksim \mathcal{N}
+\left(\alpha + \mathbf{X}\boldsymbol{\beta} + 
+\mathbf{Z}\mathbf{b}, \ \sigma^2 \mathbf{I}\right)$$
+$$\mathbf{b} \thicksim \mathcal{N}
+\left(\mathbf{0},\boldsymbol{\Sigma}\right),$$
+
+Both frequentist and bayesian need to estimate
+$$\boldsymbol{\Sigma}, \ \alpha, \ \boldsymbol{\beta},\ \boldsymbol{b}, \ and \  \sigma$$
+
+
+```{r}
+## to save the stan model as .Rdata
+# save(stan_nb0, file = "stan_nb0_20210120.Rdata")
+
+## to get the .Rdata file 
+## from local directory
+load("stan_nb0_20210120.Rdata")
+
+## to open the html stan API
+# launch_shinystan(stan_nb0)
+```
+
+
+```{r fig.height=15, fig.width=5}
+plot(stan_nb0, 
+     ## stan_glm does not support trace
+     ## in basic plot function
+     combo = c("hist", "trace"), 
+     widths = c(1, 1.5),
+     theme = theme_bw(base_size = 16))
+```
+
+```{r fig.height=10, fig.width=6}
+stan_plot(stan_nb0,
+          pars = "beta",
+          widths = c(1, 1.5),
+          theme = theme_bw(base_size = 16))
+```
+
+
+```{r fig.height=16, fig.width=9}
+stan_trace(stan_nb0, 
+           pars = "beta",
+           inc_warmup = TRUE, 
+           nrow = 13,
+           ncol = 3)
+
+## all the parameters set up in model
+# stan_nb0[["stanfit"]]@model_pars
+##  [1] "gamma"           "z_beta"          "z_beta_smooth"   "smooth_sd_raw"  
+##  [5] "global"          "local"           "caux"            "mix" 
+##  [9] "one_over_lambda" "z_b"             "z_T"             "rho"            
+## [13] "zeta"            "tau"             "aux_unscaled"    "noise"          
+## [17] "aux"             "beta"            "beta_smooth"     "smooth_sd"
+## [21] "b"               "theta_L"         "mean_PPD"        "alpha"
+## [25] "lp__"
+```
+
+```{r fig.height=1.5, fig.width=6}
+stan_trace(stan_nb0, 
+           pars = "aux", 
+           inc_warmup = TRUE) +
+  ## only three options div, seq, or qual
+  scale_color_brewer(type = "seq") +
+  theme(legend.position = "none")
+
+# stan_nb0[["stanfit"]]@model_pars
+##  [1] "gamma"           "z_beta"          "z_beta_smooth"   "smooth_sd_raw"  
+##  [5] "global"          "local"           "caux"            "mix" 
+##  [9] "one_over_lambda" "z_b"             "z_T"             "rho"            
+## [13] "zeta"            "tau"             "aux_unscaled"    "noise"          
+## [17] "aux"             "beta"            "beta_smooth"     "smooth_sd"
+## [21] "b"               "theta_L"         "mean_PPD"        "alpha"
+## [25] "lp__"
+```
+
+
+```{r fig.height=25, fig.width=9}
+stan_trace(stan_nb0, 
+           pars = "b", 
+           inc_warmup = TRUE, 
+           nrow = 20,
+           ncol = 3) +
+  ## only three options div, seq, or qual
+  scale_color_brewer(type = "seq") +
+  theme(legend.position = "none")
+```
+
+
+```{r}
+waic(stan_nb0)
+# loo_NB <- loo::loo(stan_nb0, 
+#                    save_psis = TRUE,
+#                    k_threshold = 0.7)
+# 
+# plot(loo_NB, label_points = TRUE)
+# 
+# yrep <- brms::posterior_predict(stan_nb0)
+# ppc_loo_pit_overlay(count_gather$counting, 
+#                     yrep, 
+#                     lw = weights(loo_NB$psis_object), 
+#                     compare = "uniform")
+```
+
+
+```{r fig.height=10, fig.width=80}
+prior_summary(stan_nb0)
+posterior_vs_prior(stan_nb0) +
+  ## to remove the labels
+  theme(legend.position="none") +
+  guides(fill = FALSE) 
+```
+
+
+```{r}
+stan_fev0 <- 
+  brm(fevslope ~ -1 + age + genotype + gender + elast,
+      data = fev_ra_time1,
+      family = gaussian(),
+      chains = 4, 
+      iter = 30000, 
+      warmup = 3000,
+      control = list(adapt_delta = 0.95))
+
+save(stan_fev0, file = "stan_fev0_20201208.Rdata")
+```
+
+
+```{r}
+stan_fev_time1 <- 
+  brm(fevslope ~ age + genotype + gender + il1 +
+        Prevotella + Gemella + Staphylococcus + 
+         Streptococcus + Veillonella + Leptotrichia + Inquilinus +
+         Achromobacter + Neisseria + Lysobacter + 
+         Haemophilus + Pseudomonasplus + Stenotrophomonas,
+      data = fev_ra_time1,
+      family = gaussian(),
+      chains = 4, 
+      iter = 10000, 
+      warmup = 3000,
+      cores = getOption("mc.cores", 3),
+      control = list(adapt_delta = 0.95))
+
+save(stan_fev_time1, file = "stan_fev_time1_20201205.Rdata")
+```
+

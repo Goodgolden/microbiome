@@ -1,0 +1,194 @@
+---
+title: "06_boxplot_loading"
+author: "Randy"
+date: "9/14/2020"
+output:
+  html_document:
+    df_print: paged
+  word_document:
+    reference_docx: template.docx
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r packages, include=FALSE}
+library(tidyverse)
+library(here)
+
+library(ggplot2)
+library(ggthemes)
+
+library(viridisLite)
+library(RColorBrewer)
+
+library(gridExtra)
+library(grid)
+```
+
+
+```{r "data"}
+## samples and controls
+## (both water controls and the pcr controls)
+
+MH_remove <- 
+  here::here("background",
+             "data",
+             "Morisita_Horn_RemoveT.csv") %>%
+  read.csv(row.name = 1)
+
+MH_TC <- MH_remove %>%
+  rename(MH = MH_remove) %>%
+  filter(Loading != 1.93806066666667) %>% 
+  ## loading volume for the controls are 
+  ## 1.93806066666 = mean(blank_tbl$lq_all)
+  filter(Category != "T v.s. T") %>% 
+  ## do not care about TvsT
+  mutate(Volume = ifelse(
+    Loading <= quantile(
+      as.numeric(.$Loading), 0.333), 
+    "Low", ifelse(
+      Loading <= quantile(
+        as.numeric(.$Loading), 0.666), 
+      "Med", "High"))) %>% 
+  mutate(Volume = factor(Volume, 
+          levels = c("Low", "Med", "High"))) 
+  ## reset the factor levels
+
+## information about the quantile, range, 
+## and geometrical cutoff scores for the loadings
+```
+
+
+```{r "quantiles", echo=TRUE}
+quantile(as.numeric(MH_TC$Loading), c(0.333, 0.666))
+range(MH_TC$Loading)
+c(1/3, 2/3) * (2.8159834 + 7.064239727)
+```
+
+
+```{r "plot", fig.height=5, fig.width=6}
+## subset the sample and negative pcr controls
+MH_TN <- MH_TC %>%
+  filter(Category == "T v.s. N")
+
+## subset the sample and the water controls
+MH_TH <- MH_TC %>%
+  filter(Category == "T v.s. H")
+
+Plot_B <- ggplot(MH_TC) +
+  ylab("Morisita-Horn Index") + 
+  xlab("Control Loading Levels") +
+  ylim(0, 0.3) +
+  geom_jitter(aes(Volume, MH, col=Volume), 
+              shape = 16, position = position_jitter(0.4), 
+              alpha = 0.8, show.legend = F) +
+  geom_boxplot(aes(Volume, MH, fill=Volume), 
+               show.legend = F) +
+  theme_classic() +
+  ggthemes::scale_colour_tableau("Jewel Bright") +
+  ggthemes::scale_fill_tableau("Jewel Bright") +
+  ggtitle("Boxplot of Morisita-Horn Index", 
+          "Different Pair Comparison for T v.s. (N+H)") 
+
+Plot_C <- ggplot(MH_TN) +
+  ylab("Morisita-Horn Index") + 
+  ylim(0, 0.3) +
+  xlab("Control Loading Levels") +
+  geom_jitter(aes(Volume, MH, col=Volume), 
+              shape = 16, position=position_jitter(0.4), 
+              alpha = 0.8, show.legend = F) +
+  geom_boxplot(aes(Volume, MH, fill=Volume), 
+               show.legend = F) +
+  theme_classic() +
+  ggthemes::scale_colour_tableau("Jewel Bright") +
+  ggthemes::scale_fill_tableau("Jewel Bright") +
+  ggtitle("Boxplot of Morisita-Horn Index", 
+          "Different Pair Comparison for T v.s. N") 
+
+Plot_D <- ggplot(MH_TH) +
+  ylab("Morisita-Horn Index") + 
+  xlab("Control Loading Levels") +
+  ylim(0, 0.3) +
+  geom_jitter(aes(Volume, MH, col=Volume), 
+              shape = 16, position=position_jitter(0.4), 
+              alpha = 0.8, show.legend = F) +
+  geom_boxplot(aes(Volume, MH, fill=Volume), 
+               show.legend = F) +
+  theme_classic() +
+  ggthemes::scale_colour_tableau("Jewel Bright") +
+  ggthemes::scale_fill_tableau("Jewel Bright") +
+  ggtitle("Boxplot of Morisita-Horn Index", 
+          "Different Pair Comparison for T v.s. H")
+
+Plot_B 
+Plot_C
+Plot_D
+```
+
+```{r "boxplots morisita-horn", fig.height = 8, fig.width = 6}
+Plot_B2 <- ggplot(MH_TC) +
+  ylab("Morisita-Horn Index") + 
+  xlab("Control Loading Levels") +
+  geom_jitter(aes("Volume", MH, col=Volume), 
+              shape=16, position=position_jitter(0.4), 
+              alpha = 0.8, show.legend = F) +
+  geom_boxplot(aes("Volume", MH, fill=Volume), show.legend = F) +
+  ggthemes::scale_colour_tableau("Jewel Bright") +
+  ggthemes::scale_fill_tableau("Jewel Bright") +
+  ggtitle( "Different Pair Comparison for T v.s. (N+H)") 
+
+Plot_C2 <- ggplot(MH_TN) +
+  ylab("Morisita-Horn Index") + 
+  xlab("Control Loading Levels") +
+  geom_jitter(aes("Volume", MH, col=Volume), 
+              shape=16, position=position_jitter(0.4), 
+              alpha = 0.8, show.legend = F) +
+  geom_boxplot(aes("Volume", MH, fill=Volume), show.legend = F) +
+  ggthemes::scale_colour_tableau("Jewel Bright") +
+  ggthemes::scale_fill_tableau("Jewel Bright") +
+  ggtitle("Different Pair Comparison for T v.s. N") 
+
+Plot_D2 <- ggplot(MH_TH) +
+  ylab("Morisita-Horn Index") + 
+  xlab("Control Loading Levels") +
+  geom_jitter(aes("Volume", MH, col=Volume), 
+              shape=16, position=position_jitter(0.4), 
+              alpha = 0.8, show.legend = F) +
+  geom_boxplot(aes("Volume", MH, fill=Volume), show.legend = F) +
+  ggthemes::scale_colour_tableau("Jewel Bright") +
+  ggthemes::scale_fill_tableau("Jewel Bright") +
+  ggtitle("Different Pair Comparison for T v.s. H") 
+
+Plot_B3 <- Plot_B2 + 
+  facet_wrap("Volume") + 
+  theme_test() + 
+  theme(axis.text.x = element_blank(), 
+        axis.ticks = element_blank()) 
+
+Plot_C3 <- Plot_C2 +
+  facet_wrap("Volume") + 
+  theme_test() + 
+  theme(axis.text.x = element_blank(),
+        axis.ticks = element_blank()) 
+
+Plot_D3 <- Plot_D2 +
+  facet_wrap("Volume") + 
+  theme_test() + 
+  theme(axis.text.x = element_blank(), 
+        axis.ticks = element_blank()) 
+
+gridExtra::grid.arrange(Plot_B3, Plot_C3, Plot_D3, ncol=1, nrow=3)
+
+# kruskal.test(data=MH_TC, MH~Volume)
+# pairwise.wilcox.test(x=MH_TC$MH, g=MH_TC$Volume, p.adjust.method = "fdr")
+# 
+# kruskal.test(data=MH_TN, MH~Volume)
+# pairwise.wilcox.test(x=MH_TN$MH, g=MH_TN$Volume, p.adjust.method = "fdr")
+# 
+# kruskal.test(data=MH_TH, MH~Volume)
+# pairwise.wilcox.test(x=MH_TH$MH, g=MH_TH$Volume, p.adjust.method = "fdr")
+```
+
+

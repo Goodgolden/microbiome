@@ -1,0 +1,70 @@
+---
+title: '06 Supplementary Figure2'
+author: "Randy"
+date: "9/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r Alpha Diversity in Clusters}
+# the cluster from last figure, but we do not need them
+DataSet_SP1 <- DataSet_SP %>%
+  filter(Dim1 <= -0.1 & Dim2 >= -0.25) %>%
+  mutate(Cluster = "C1") %>%
+  select(ID, EnzD, Dim1, Dim2, Cluster)
+
+DataSet_SP2 <- DataSet_SP %>%
+  filter(Dim2 <= -0.3) %>%
+  mutate(Cluster = "C2") %>%
+  select(ID, EnzD, Dim1, Dim2, Cluster)
+
+DataSet_SP3 <- DataSet_SP %>%
+  filter(Dim1 > -0.1 & Dim2 > -0.3) %>%
+  mutate(Cluster = "C3") %>%
+  select(ID, EnzD, Dim1, Dim2, Cluster)
+
+DataSet_SPAll <- rbind(DataSet_SP1, DataSet_SP2, DataSet_SP3) %>%
+  as.data.frame()
+
+Diversity <- DigestRel %>%
+  select(-Total) %>%
+  column_to_rownames("OTU_Name") %>%
+  t() %>%
+  as.data.frame() %>% 
+  cbind(., DivIndex = diversity(., index = "shannon")) %>%
+  rownames_to_column(var = "Collection") %>%
+  separate(Collection, into = c("Method", "ID"), sep = 1) %>% 
+  # set up the Method and ID
+  separate(ID, into = c("ID", "EnzD"), sep = 4) %>% 
+  # set up the digestion method
+  mutate(EnzD = replace(EnzD, EnzD != "D", "N")) %>%  
+  # add variable for digestion
+  select(Method, ID, EnzD, DivIndex)
+
+Diversity_SP <- inner_join(DataSet_SPAll, Diversity, 
+                           by = c("ID" = "ID", "EnzD" = "EnzD"))
+```
+
+```{r Supplementary Figure2, fig.height = 5, fig.width = 8}
+Plot_Diversity <- Diversity_SP %>%
+  ggplot(aes(Cluster, DivIndex, fill=Cluster)) +
+  geom_boxplot(show.legend = F) +
+  facet_grid( ~ EnzD, labeller = labeller(EnzD = c(D = "Digested", N = "NonDigested"))) +
+  ggthemes::scale_fill_wsj("colors6") +
+  theme_bw() +
+  ggtitle("Ordination Biplot", 
+          "Beta diveristy values for Sputum") +
+  labs(y = "Alpha Diversity Index", x = "Clusters") +
+  theme(text = element_text(size = 15))
+
+Plot_Diversity
+```
+
+```{r Kruskal-Wallis Rank}
+kruskal.test(data = Diversity_SP, DivIndex ~ Cluster)
+```
+

@@ -1,0 +1,91 @@
+---
+title: "00_functions"
+author: "Randy"
+date: "9/14/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
+graphics.off()
+```
+
+```{r library, message=FALSE, warning=FALSE}
+## Load library
+# library(readr)
+library(readxl)
+library(tidyverse)
+
+library(dendsort)
+library(pheatmap)
+
+library(ggplot2)
+library(RColorBrewer)
+library(viridisLite)
+
+library(vegan)
+
+library(exactRankTests)
+library(Matrix)
+
+library(gridExtra)
+library(grid)
+
+library(stringr)
+
+# library(diagonals)
+# library(schoolmath)
+# library(RGraphics)
+
+# library(reshape2)
+# library(matrixStats)
+# library(matrixTests)
+
+devtools::session_info()
+```
+
+```{r functions}
+
+## decide the outlier out of 4*IQR
+is_outlier <- function(x) {
+      return(x < quantile(x, 0.25) - 1.5 * IQR(x) |
+               x > quantile(x, 0.75) + 1.5 * IQR(x))
+      }
+
+## split the taxum names from OTU_names
+## return the last level
+## Thanks Kayla for the code
+## Example: 01 Dataset.Rmd
+## Line: 20
+name_split <- 
+  function(names){
+      names = names
+      save = strsplit(names, "/")
+      h = 0
+      for(i in 1:length(names)){
+        h[i] = length(save[[i]])}
+      i = 0
+      name.list = NULL
+      for(i in 1:length(save)){
+        name.list[i] = save[[i]][h[i]]}
+      return(name.list)
+      }
+
+## rearrange the dendrogram phelogeny tree
+## example in 02 Heatmap.Rmd
+## Line: 26
+sort_hclust <- 
+  function(x) 
+    as.hclust(dendsort::dendsort(as.dendrogram(x)))
+
+
+## set up the quantile scale level for the heatmap
+## not used in this project
+## useful to setup a quantile break heatmap
+quantile_breaks <- 
+  function(xs, n = 10) {
+    breaks <- quantile(xs, probs = seq(0 , 1, length.out = n))
+    breaks[!duplicated(breaks)]
+    }
+```

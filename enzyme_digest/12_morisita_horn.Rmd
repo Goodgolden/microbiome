@@ -1,0 +1,43 @@
+---
+title: "12 Morisita Horn"
+author: "Randy"
+date: "9/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r Morisita Horn Correlation, fig.height=4, fig.width=4}
+Dist <- DigestCounts %>%
+  select(-"Total", -"B1043", -"B1043D") %>%
+  t() %>%
+  as.data.frame() %>%
+  select(-"root") %>%
+  vegdist(method="morisita") %>%
+  as.matrix() %>%
+  `-`(1, .) 
+
+A <- rblock(ncol(Dist)/2) %>%
+  as.matrix()
+
+K <- Dist * A %>%
+  as.data.frame() 
+
+MH <- K[K!=0] %>%
+  unique() %>%
+  as.data.frame() %>%
+  cbind(Dat_G$Method) %>%
+  select(MH=1, Method=2)
+  
+MH_Table <- MH %>%
+  group_by(Method) %>%
+  summarize(Count=n()) %>%
+  mutate(Freq= Count/sum(Count))
+
+MH_pval <- wilcox.exact(MH~Method, data=MH)$p.value
+
+```
+

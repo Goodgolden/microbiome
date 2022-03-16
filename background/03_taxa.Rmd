@@ -1,0 +1,107 @@
+---
+title: "03_taxa"
+author: "Randy"
+date: "9/14/2020"
+output:
+  html_document:
+    df_print: paged
+  word_document:
+    reference_docx: template.docx
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(here)
+library(ggplot2)
+```
+
+
+
+```{r dataset}
+## import the dataset or just run 
+## all the .Rmd files one by one
+Merge_RA_control <- 
+  here::here("background",
+             "data",
+             "Background_Merge_control_clean.csv") %>%
+  read.csv(row.names = 1,
+           check.names = F) 
+```
+
+```{r function}
+## split the taxum names from OTU_names
+## return the last level
+## Thanks Kayla for the code
+name_split <- function(names){
+      names = names
+      save = strsplit(names, "/")
+      h = 0
+      for(i in 1:length(names)){
+        h[i] = length(save[[i]])}
+      i = 0
+      name.list = NULL
+      for(i in 1:length(save)){
+        name.list[i] = save[[i]][h[i]]}
+      return(name.list)
+      }
+```
+
+```{r "single species plot", fig.height=3, fig.width=8, comment=NA}
+## after the heapmap from 02 Heatmap
+## more details on each taxa from control groups
+max_species_control <- 
+  Merge_RA_control %>% 
+  map(max) 
+  ## get the max value 
+  ## for RA in each sample
+
+MAT_RA_control <- 
+  Merge_RA_control %>%
+  t() %>% 
+  ## transpose the data.frame
+  as.data.frame() %>% 
+  ## after the t() function
+  ##the data frame is in matrix form
+  rownames_to_column("OTU_Names") %>% 
+  mutate(max = max_species_control) %>% 
+  ## add this max RA value into the matrix
+  filter(max > 0.1) %>% 
+  ## This is a exploratory step for cut off score
+  select(-max) %>% ## remove the max RA
+  mutate(OTU_Names = name_split(OTU_Names)) %>% 
+  ## only keep the lowest level
+  ## see details in 00 Function.Rmd
+  ## Line:25
+  column_to_rownames("OTU_Names") %>%
+  t() %>% 
+  ## transpose the data.frame
+  as.data.frame() %>% 
+  ## after the t() function
+  ##the data frame is in matrix form
+  rownames_to_column("Name") %>%
+  separate(Name, c("Name", "Group", "Plates", 
+                   "Real", "lq_all"), "_") %>% 
+  ## return all the information back to table
+  column_to_rownames("Name") %>%
+  filter(Group != "T") %>% 
+  ## only the controls are needed
+  select(-Group, -Plates, -Real, -lq_all)
+
+plot_E <- MAT_RA_control %>%
+  names() %>% ## map() functional do all 
+  ## the ggplots for the species in the matrix
+  map(~ ggplot(MAT_RA_control, 
+        aes_string(y = ., 
+                   x = factor(row.names(MAT_RA_control)))) + 
+        geom_point() +
+        labs(x = "Control") +
+        labs(title = .) +
+        labs(y = "Relative Abundance") +
+        theme_bw() +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1)))
+
+plot_E
+
+```
+

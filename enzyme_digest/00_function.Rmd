@@ -1,0 +1,65 @@
+---
+title: "00 Functions"
+author: "Randy"
+date: "9/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+## Functions used in this project
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r name.split()}
+# this is a function from Kayla, for splitting taxa names 
+# an example in
+# Rmd file: 04 Beta Diversity
+# Line46 and 118
+name.split <- function(names){
+  names = names
+  save = strsplit(names,"/") 
+  # strsplit() is a function 
+  # like seperate(vector, "the-seperate-mark")
+  # names in the names-vector is the first level
+  # save is the second level
+  # so we need to use save[[]] to call 
+  h = 0
+  for(i in 1:length(names)){ 
+    # for loop for each name
+    h[i] = length(save[[i]])
+    # h is an indicator of each level of taxa name
+    } 
+    
+  i = 0
+  name.list = NULL
+  
+  for(i in 1:length(save)){ 
+    # for loop to get each level of the taxa 
+    name.list[i] = save[[i]][h[i]]
+    }
+  
+  return(name.list)
+  }
+```
+
+
+```{r rblock()}
+rblock <- function(nb) { 
+  # to create a block diagonal matrix
+  .bdiag(replicate(nb, {Matrix(c(0,1,1,0), 2,2)}))
+    }
+```
+
+
+```{r wilcoxon_pair_row}
+
+## wilcoxon test for pairs in two separated dataset
+## Rmd file: 
+## 07 General Level Comparisons
+## Line41
+
+wilcoxon_pair_row <- function(x, y) {
+  wilcox.exact(x, y, paired=T, conf.int=T)
+  }
+
+```

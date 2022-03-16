@@ -1,0 +1,38 @@
+---
+title: "08 Table1"
+author: "Randy"
+date: "9/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Phyla Table OP}
+Table_OP <- names(AbsoluteRel_OP_D) %>%
+  name.split() %>%
+  as.data.frame() %>%
+  rename(Genera=".") %>%
+  cbind.data.frame(AbsoluteRel_OP_D_Median, AbsoluteRel_OP_N_Median, Wilcoxon_OP_est, Wilcoxon_OP_pval) %>% 
+  column_to_rownames("Genera") %>%
+  xtable()
+
+knitr::kable(Table_OP)
+```
+
+```{r Phyla Table SP}
+Table_SP <- names(AbsoluteRel_SP_D) %>%
+  name.split() %>%
+  as.data.frame() %>%
+  rename(Genera=".") %>%
+  cbind.data.frame(AbsoluteRel_SP_D_Median, 
+                   AbsoluteRel_SP_N_Median, 
+                   Wilcoxon_SP_est, 
+                   Wilcoxon_SP_pval) %>% 
+  column_to_rownames("Genera") %>%
+  arrange(`p-value`) %>%
+  xtable()
+
+knitr::kable(Table_SP)
+```

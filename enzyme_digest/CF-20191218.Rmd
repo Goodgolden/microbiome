@@ -1,0 +1,559 @@
+
+
+
+
+
+
+
+
+
+
+```{r message=FALSE}
+DigestRel <- DigestRel %>%
+  select(-"Total", -"B1043", -"B1043D")
+DigestRel_Med_row <- DigestRel %>%
+  column_to_rownames("OTU_Name") %>%
+  as.matrix() %>%
+  rowMedians() %>%
+  as.data.frame() %>%
+  rename(Median=".") %>%
+  cbind(DigestRel) %>%
+  select(OTU_Name, Median, everything())
+
+Medianwilx <- DigestRel_Med_row %>%
+  filter(Median>=0.01) %>%
+  select(-Median) %>%
+  mutate(OTU_Name=name.split(OTU_Name)) %>%
+  column_to_rownames("OTU_Name") %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column("Collection") %>%
+  separate(Collection, into=c("Method","ID"), sep=1) %>% # set up the Method and ID
+  separate(ID, into=c("ID","EnzD"), sep=4) %>% # set up the digestion method
+  mutate(EnzD=replace(EnzD, EnzD!="D", "N"))
+
+Median_D <- Medianwilx %>%
+  filter(EnzD=="D") %>%
+  select(-Method) %>%
+  cbind(MH) %>%
+  select(-EnzD) %>%
+  select(everything(), MH, Method) %>%
+  column_to_rownames("ID") 
+Median_D$MH <- as.factor(Median_D$MH)  
+Cor_D <- melt(Median_D)
+
+Median_N <- Medianwilx %>%
+  filter(EnzD=="N") %>%
+  select(-Method) %>%
+  cbind(MH) %>%
+  select(-EnzD) %>%
+  select(everything(), MH, Method) %>%
+  column_to_rownames("ID") 
+Median_N$MH <- as.factor(Median_N$MH)  
+Cor_N <- melt(Median_N)
+
+Cor_N$MH <- as.numeric(as.character(Cor_N$MH))
+```
+
+
+```{r FigureS3B, fig.height=8, fig.width=10}
+Plot_C <- ggplot(Cor_N) +
+  geom_boxplot(aes(MH, value+0.01, fill=Method)) +
+  xlab("MH per pair") +
+  ylab("log RA for taxa") +
+  scale_y_log10() +
+  guides(col=guide_legend(title="Group"))+
+  facet_wrap(~variable, ncol=4, , scales = 'free_x' )+
+  scale_x_discrete(labels=c("C" = "OP", "E" = "SP")) +
+  ylab("Genera")
+
+Plot_B
+  theme_bw()+
+  ggthemes::scale_colour_wsj("colors6") +
+  theme(axis.text.x = element_text(size=10, angle=45))
+Plot_C
+N <- dim(Median_N)[2]-3
+CD <- Median_D[, 1:N]
+CN <- as.numeric(as.character(Median_N$MH))
+Correlation <- apply(CD, 2, FUN=cor.test, y=CN, method="spearman")
+Correlation
+```
+
+
+```{r Gram_positive and Gram_negative species}
+DigestData <- DigestRel %>%
+  filter(OTU_Name %in% Sig_Genera) %>%
+  column_to_rownames("OTU_Name") %>%
+  t() %>%
+  as.data.frame()
+
+Gram_plus<- c(grep("Bacteria/Firmicutes", colnames(DigestData)), grep("Bacteria/Actinobacteria",colnames(DigestData)))
+Gram_plus <- Gram_plus[-7]; Gram_plus
+Gram_minus <- c(2,7,8,11,12)
+
+DigestID <- DigestData %>%
+  rownames_to_column("Collection") %>%
+  separate(Collection, into=c("Method","ID"), sep=1) %>% # set up the Method and ID
+  separate(ID, into=c("ID","EnzD"), sep=4) %>% # set up the digestion method
+  mutate(EnzD=replace(EnzD, EnzD!="D", "N"))
+          
+Gram_plus_N <- DigestID %>%
+  filter(EnzD=="N") %>%
+  select(-EnzD) %>%
+  unite("MID", Method:ID, sep="") %>%
+  column_to_rownames("MID") %>%
+  select(Gram_plus) %>%
+  apply(1, sum) %>%
+  as.data.frame() %>%
+  select(Gram_positive_N_Rel=1)
+
+Gram_minus_N <- DigestID %>%
+  filter(EnzD=="N") %>%
+  select(-EnzD) %>%
+  unite("MID", Method:ID, sep="") %>%
+  column_to_rownames("MID") %>%
+  select(Gram_minus) %>%
+  apply(1, sum) %>%
+  as.data.frame() %>%
+  select(Gram_negative_N_Rel=1)
+
+# # "Bacteria/Firmicutes/Bacilli/Bacillales/Staphylococcaceae/Staphylococcus" is Gram negative bacterium
+Gram_N_Rel <- cbind(Gram_plus_N, Gram_minus_N) %>%
+  as.data.frame()
+
+```
+
+
+```{r}
+Gram_plus_D <- DigestID %>%
+  filter(EnzD=="D") %>%
+  select(-EnzD) %>%
+  unite("MID", Method:ID, sep="") %>%
+  column_to_rownames("MID") %>%
+  select(Gram_plus) %>%
+  apply(1, sum) %>%
+  as.data.frame() %>%
+  select(Gram_positive_D_Rel=1)
+
+Gram_minus_D <- DigestID %>%
+  filter(EnzD=="D") %>%
+  select(-EnzD) %>%
+  unite("MID", Method:ID, sep="") %>%
+  column_to_rownames("MID") %>%
+  select(Gram_minus) %>%
+  apply(1, sum) %>%
+  as.data.frame() %>%
+  select(Gram_negative_D_Rel=1)
+
+Gram_D_Rel <- cbind(Gram_plus_D, Gram_minus_D) %>%
+  as.data.frame()
+
+MH_C <- MH %>%
+  mutate(MH=as.character(MH))
+Gram_plot_N <- cbind(Gram_N_Rel, MH_C) %>%
+  melt() %>%
+  mutate(MH=as.numeric(as.character(MH)))
+# View(Gram_plot_N)
+```
+
+
+```{r Figure3}
+Plot_G1 <- Gram_plot_N %>%
+  ggplot() +
+  geom_point(aes(value, MH, col=Method)) +
+  xlab("MH per pair") +
+  ylab("RA") +
+  theme_classic() +
+  ggthemes::scale_colour_wsj("colors6", name="Methods", labels=c("OP", "SP")) +
+  theme(legend.position = "right") 
+  
+Plot_G1
+
+Gram_plus_Diff <- Gram_plus_D - Gram_plus_N
+Gram_minus_Diff <- Gram_minus_D - Gram_minus_N
+Gram_plus_plot_Diff <- cbind(Gram_plus_Diff, MH_C) %>%
+  melt(id.vars=c("MH", "Method")) %>%
+  mutate(MH=as.numeric(as.character(MH)))
+
+Gram_minus_plot_Diff <- cbind(Gram_minus_Diff, MH_C) %>%
+  melt(id.vars=c("MH", "Method")) %>%
+  mutate(MH=as.numeric(as.character(MH)))
+
+Plot_G2 <- Gram_plus_plot_Diff %>%
+  ggplot() +
+  geom_point(aes(value, MH, col=Method)) + 
+  xlab("MH per pair") +
+  ylab("Difference (Enzd-NonEnzd) Gram+ RA") +
+  theme_classic() +
+  scale_color_discrete(name="Methods", labels=c("OP", "SP")) +
+  ggthemes::scale_colour_wsj("colors6") +
+  theme(legend.position = "right") 
+  
+Plot_G2
+
+Plot_G3 <- Gram_minus_plot_Diff %>%
+  ggplot() +
+  geom_point(aes(value, MH, col=Method)) + 
+  xlab("MH per pair") +
+  ylab("Difference (Enzd-NonEnzd) Gram- RA") +
+  theme_classic() +
+  scale_color_discrete(name="Methods", labels=c("OP", "SP")) +
+  ggthemes::scale_colour_wsj("colors6") +
+  theme(legend.position = "right") 
+  
+Plot_G3
+```
+
+
+```{r fig.height=4, fig.width=15}
+grid.arrange(Plot_G1, Plot_G2, Plot_G3, ncol=3)
+
+```
+
+
+```{r Phyla in relative abundance, message=FALSE, warning=FALSE}
+PhylaRel <- DigestRel %>%
+  separate(OTU_Name, into=c("P", "C", "O", "F", "G", "S")) %>%
+  select(-O,-`F`,-G,-S) %>%
+  unite(phyla, c(P,C), sep="/" )
+  
+# Phyla_mean <- PhylaRel %>%
+#   group_by(phyla) %>%
+#   summarise_if(is.numeric, mean, na.rm=T) %>%
+#   column_to_rownames("phyla")
+# 
+# # View(Phyla_mean)
+# # View(Phyla_count)
+# Phyla_count <- PhylaRel %>%
+#   group_by(phyla) %>%
+#   dplyr::summarise(count=n()) %>%
+#   column_to_rownames("phyla")
+# 
+# # Phyla_matrix <- map2(Phyla_count, Phyla_mean, .f=`*`) %>%
+# #   as.data.frame()
+
+Phyla_matrix <- aggregate(PhylaRel[, -1], by = list(PhylaRel$phyla), FUN = sum) %>%
+  column_to_rownames("Group.1")
+
+View(Phyla_matrix) # this is Kayla's wilx.phyla dataset transposed?
+# View(wilx.phyla)
+
+```
+
+
+```{r Phyla Specific Comparisons OP Table}
+# Wilcoxon rank test and boxplots for OP
+Phyla_OP <- Phyla_matrix %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column("Collection") %>%
+  separate(Collection, into=c("Method","ID"), sep=1) %>% # set up the Method and ID
+  separate(ID, into=c("ID","EnzD"), sep=4) %>% # set up the digestion method
+  mutate(EnzD=replace(EnzD, EnzD!="D", "N")) %>%
+  filter(Method=="C") 
+
+Phyla_OP_D <- Phyla_OP %>%
+  filter(EnzD=="D") %>%
+  select(-Method, -EnzD) %>%
+  column_to_rownames("ID")
+
+Phyla_OP_N <- Phyla_OP %>%
+  filter(EnzD=="N") %>%
+  select(-Method, -EnzD) %>%
+  column_to_rownames("ID")
+
+Phyla_OP_D_Median <- Phyla_OP_D %>%
+  apply(2, median) %>%
+  as.data.frame() %>%
+  select(Median=1) %>%
+  rownames_to_column("Phyla") %>%
+  filter(Median>=0.01) %>%
+  column_to_rownames("Phyla")
+
+Phyla_OP_N_Median <- Phyla_OP_N %>%
+  apply(2, median) %>%
+  as.data.frame() %>%
+  select(Median=1) %>%
+  rownames_to_column("Phyla") %>%
+  filter(Median>=0.01) %>%
+  column_to_rownames("Phyla")
+
+# View(Phyla_OP_N_Median)
+# View(Phyla_OP) # this is Kayla's otu.phyla
+
+# View(median.wilx.OP)
+# View(phyla.absolute.RA.OP.digest)
+# phyla.absolute.RA.OP.digest
+# View(Phyla_OP_D)
+
+Phyla_OP_D_Rel <- Phyla_OP_D %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column("Phyla") %>%
+  filter(Phyla %in% unlist(rownames(Phyla_OP_D_Median))) %>%
+  column_to_rownames("Phyla")
+Phyla_OP_D_abs <- Phyla_OP_D_Rel %>%
+  as.matrix() %>%
+  rowMedians() %>%
+  as.data.frame() %>%
+  select(Median=1) %>%
+  transmute(`Digested %`=Median*100) %>%
+  cbind(rownames(Phyla_OP_D_Median)) %>%
+  column_to_rownames("rownames(Phyla_OP_D_Median)")
+
+Phyla_OP_N_Rel <- Phyla_OP_N %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column("Phyla") %>%
+  filter(Phyla %in% unlist(rownames(Phyla_OP_N_Median))) %>%
+  column_to_rownames("Phyla")
+Phyla_OP_N_abs <- Phyla_OP_N_Rel %>%
+  as.matrix() %>%
+  rowMedians() %>%
+  as.data.frame() %>%
+  select(Median=1) %>%
+  transmute(`Nondigested %`=Median*100) %>%
+  cbind(rownames(Phyla_OP_N_Median)) %>%
+  column_to_rownames("rownames(Phyla_OP_N_Median)")
+
+# View(Phyla_OP_D_Rel) # This is Kayla's median.wilx.OP part of digested
+# View(Phyla_OP_D_abs) # This is Kayla's phyla.absolute.RA.OP.digest
+# phyla.absolute.RA.OP.digest
+# View(Phyla_OP_N_Rel)
+# View(Phyla_OP_N_abs)
+# 
+# View(t(Phyla_OP_D_Rel))
+
+
+Phyla_OP_D_Rel <- Phyla_OP_D_Rel %>%
+  t() %>%
+  as.data.frame()
+
+Phyla_OP_N_Rel <- Phyla_OP_N_Rel %>%
+  t() %>%
+  as.data.frame()
+
+Phyla_OP_wilcoxon <- map2(Phyla_OP_D_Rel, Phyla_OP_N_Rel, wilcoxon_pair_row)
+# wilx # Kayla's result
+
+Phyla__OP_estimate <- map(Phyla_OP_wilcoxon, function(x) return(x$estimate)) %>%
+  unlist() %>%
+  as.data.frame() %>%
+  rename(Estimates=1) %>%
+  transmute(`Estimate in RA %` = Estimates*100) %>%
+  round(4) %>%
+  cbind(rownames(Phyla_OP_N_Median)) %>%
+  column_to_rownames("rownames(Phyla_OP_N_Median)")
+# View(Phyla__OP_estimate)
+Phyla_OP_pval <- map(Phyla_OP_wilcoxon, function(x) return(x$p.value)) %>%
+  unlist() %>%
+  p.adjust(method="BH") %>%
+  round(4) %>%
+  ifelse(.<=0.01, "<0.01", .) %>%
+  as.data.frame() %>%
+  rename(`p-value`=1)
+Phyla_OP_table <- cbind(Phyla_OP_D_abs, Phyla_OP_N_abs, Phyla__OP_estimate, Phyla_OP_pval) %>%
+  rownames_to_column("Phyla name") %>%
+  xtable()
+# View(Phyla_OP_table)
+
+```
+
+
+```{r Phyla Specific Comparisons SP Table}
+Phyla_SP <- 
+  Phyla_matrix %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column("Collection") %>%
+  separate(Collection, 
+           into = c("Method","ID"), 
+           sep = 1) %>% 
+  # set up the Method and ID
+  separate(ID, 
+           into = c("ID","EnzD"), 
+           sep = 4) %>% 
+  # set up the digestion method
+  mutate(EnzD = replace(EnzD, EnzD != "D", "N")) %>%
+  filter(Method == "E") 
+
+Phyla_SP_D <- 
+  Phyla_SP %>%
+  filter(EnzD == "D") %>%
+  select(-Method, -EnzD) %>%
+  column_to_rownames("ID")
+
+Phyla_SP_N <- 
+  Phyla_SP %>%
+  filter(EnzD == "N") %>%
+  select(-Method, -EnzD) %>%
+  column_to_rownames("ID")
+
+Phyla_SP_D_Median <- 
+  Phyla_SP_D %>%
+  apply(2, median) %>%
+  as.data.frame() %>%
+  select(Median = 1) %>%
+  rownames_to_column("Phyla") %>%
+  filter(Median >= 0.01) %>%
+  column_to_rownames("Phyla")
+
+Phyla_SP_N_Median <- 
+  Phyla_SP_N %>%
+  apply(2, median) %>%
+  as.data.frame() %>%
+  select(Median = 1) %>%
+  rownames_to_column("Phyla") %>%
+  filter(Median >= 0.01) %>%
+  column_to_rownames("Phyla")
+
+Phyla_SP_D_Rel <- 
+  Phyla_SP_D %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column("Phyla") %>%
+  filter(Phyla %in% unlist(rownames(Phyla_SP_D_Median))) %>%
+  column_to_rownames("Phyla")
+
+Phyla_SP_D_abs <- 
+  Phyla_SP_D_Rel %>%
+  as.matrix() %>%
+  rowMedians() %>%
+  as.data.frame() %>%
+  select(Median=1) %>%
+  transmute(`Digested %` = Median*100) %>%
+  cbind(rownames(Phyla_SP_D_Median)) %>%
+  column_to_rownames("rownames(Phyla_SP_D_Median)")
+
+Phyla_SP_N_Rel <- 
+  Phyla_SP_N %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column("Phyla") %>%
+  filter(Phyla %in% unlist(rownames(Phyla_SP_N_Median))) %>%
+  column_to_rownames("Phyla")
+
+Phyla_SP_N_abs <- 
+  Phyla_SP_N_Rel %>%
+  as.matrix() %>%
+  rowMedians() %>%
+  as.data.frame() %>%
+  select(Median = 1) %>%
+  transmute(`Nondigested %` = Median*100) %>%
+  cbind(rownames(Phyla_SP_N_Median)) %>%
+  column_to_rownames("rownames(Phyla_SP_N_Median)")
+
+# View(Phyla_SP_D_Rel) # This is Kayla's median.wilx.SP part of digested
+# View(Phyla_SP_D_abs) # This is Kayla's phyla.absolute.RA.SP.digest
+# phyla.absolute.RA.SP.digest
+# View(Phyla_SP_N_abs)
+ 
+Phyla_SP_D_Rel <- 
+  Phyla_SP_D_Rel %>%
+  t() %>%
+  as.data.frame()
+
+Phyla_SP_N_Rel <- 
+  Phyla_SP_N_Rel %>%
+  t() %>%
+  as.data.frame()
+
+Phyla_SP_wilcoxon <- map2(Phyla_SP_D_Rel, 
+                          Phyla_SP_N_Rel, 
+                          wilcoxon_pair_row)
+Phyla_SP_wilcoxon
+# wilx Kayla's result
+
+Phyla__SP_estimate <- 
+  map(Phyla_SP_wilcoxon, function(x) return(x$estimate)) %>%
+  unlist() %>%
+  as.data.frame() %>%
+  rename(Estimates = 1) %>%
+  transmute(`Estimate in RA %` = Estimates*100) %>%
+  round(4) %>%
+  cbind(rownames(Phyla_SP_N_Median)) %>%
+  column_to_rownames("rownames(Phyla_SP_N_Median)")
+
+Phyla_SP_pval <- 
+  map(Phyla_SP_wilcoxon, 
+      function(x) return(x$p.value)) %>%
+  unlist() %>%
+  p.adjust(method = "BH") %>%
+  round(4) %>%
+  ifelse(. <= 0.01, "<0.01", .) %>%
+  as.data.frame() %>%
+  rename(`p-value` = 1)
+
+Phyla_SP_table <- 
+  cbind(Phyla_SP_D_abs, 
+        Phyla_SP_N_abs, 
+        Phyla__SP_estimate, 
+        Phyla_SP_pval) %>%
+  rownames_to_column("Phyla name")
+# View(Phyla_SP_table)
+
+```
+
+
+```{r MH Correlations in Phyla}
+
+
+
+
+
+
+
+
+```
+
+
+```{r Alpha Diversity Plot Figure S2, fig.height=4, fig.width=5}
+DigestRel_D <- 
+  DigestRel %>%
+  select("OTU_Name", contains("D")) %>% 
+  column_to_rownames("OTU_Name") 
+
+DigestRel_N <- 
+  DigestRel %>%
+  select(-contains("D")) %>% 
+  column_to_rownames("OTU_Name") 
+
+Odiv_D <- 
+  DigestRel_D %>%
+  t() %>%
+  as.data.frame() %>%
+  diversity(index = "shannon") %>%
+  as.data.frame()
+
+Odiv_N <- 
+  DigestRel_N %>%
+  t() %>%
+  as.data.frame() %>%
+  diversity(index = "shannon") %>%
+  as.data.frame()
+
+Odiv_diff <- 
+  Odiv_D[,1] - Odiv_N[,1] %>%
+  as.data.frame() %>%
+  select(Diversity = 1)
+
+Plot_D <- 
+  cbind(Odiv_diff, MH) %>%
+  ggplot() +
+  geom_point(aes(x = MH, 
+                 y = Diversity, 
+                 col = Method)) +
+  guides(col = guide_legend(
+    title = "Sample Type", 
+    override.aes = list(size = 1)),
+    size = F) +
+  xlab("Morisita Horn") +
+  ylab("Alpha Diversity -- Digested-Nondigested") +
+  theme(text = element_text(size = 15)) +
+  ggthemes::scale_colour_wsj("colors6", 
+                             name = "Method", 
+                             labels = c("OP", "SP")) +
+  theme_classic()
+Plot_D
+```
+

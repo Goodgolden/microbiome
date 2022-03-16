@@ -1,0 +1,77 @@
+---
+title: "10 Staph SP"
+author: "Randy"
+date: "9/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r p-values for Staph in SP}
+# run all the wilcox test for each significant genera
+i <- 0
+hold <- NULL
+SP_bps_p <- NULL
+
+for(i in 1:(length(Sig_Genera)-3)) {
+  hold <- wilcox.exact(SP_Vals[, i+3] ~ SP_Vals$EnzD, paired=T)
+  SP_bps_p[i] <- hold$p.value
+}
+
+# reformat and replace the 0 with <0.01
+SP_round_p <- SP_bps_p %>%
+  p.adjust(method="BH") %>%
+  round(2) %>%
+  ifelse(.==0, 0.01, .) %>%
+  ifelse(.==0.01, paste("p<", ., sep=""), .) %>%
+  ifelse(.!="p<0.01", paste("p=", ., sep=""), .) %>%
+  ifelse(nchar(.)==5, paste(., "0", sep=""), .)
+
+# create new dataset with relative aboundance of all taxa, with the Signed rank
+bps <- DigestRel %>%
+  filter(OTU_Name %in% Sig_Genera) %>%
+  mutate("OTU_Name" = name.split(OTU_Name)) %>%
+  select(-"Total", -"B1043", -"B1043D") %>%
+  column_to_rownames("OTU_Name") %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column("Collection") %>%
+  separate(Collection, 
+           into = c("Method","ID"), 
+           sep = 1) %>% # set up the Method and ID
+  separate(ID, 
+           into = c("ID","EnzD"), 
+           sep = 4) %>% # set up the digestion method
+  mutate(EnzD = replace(EnzD, EnzD != "D", "N"))
+
+bps_D <- bps %>%
+  filter(EnzD == "D") %>%
+  select(-EnzD) %>%
+  unite("MID", Method:ID, sep = "") %>%
+  column_to_rownames("MID")
+
+bps_N <- bps %>%
+  filter(EnzD=="N") %>%
+  select(-EnzD) %>%
+  unite("MID", Method:ID, sep="") %>%
+  column_to_rownames("MID")
+
+bps <- cbind(bps_D, bps_N)
+
+bps_diff <- bps_D - bps_N # difference between the Digest and NonDigest 
+
+Dat_G <- bps_diff %>%
+  as.data.frame() %>%
+  rownames_to_column("MID") %>%
+  separate(MID, 
+           into = c("Method", "ID"), 
+           sep = 1) %>%
+  column_to_rownames("ID") 
+
+# create the long form data.frame
+Dat_genera<- Dat_G %>%
+  melt(idvars = "Method")
+```
+

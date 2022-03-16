@@ -1,0 +1,380 @@
+---
+title: "02 Dashboard"
+author: "Randy"
+date: "9/26/2020"
+output:
+  html_document:
+    df_print: paged
+  word_document:
+    reference_docx: template.docx
+---
+
+```{r "setup", echo=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	comment = NA,
+	message = FALSE,
+	warning = FALSE,
+	cache = TRUE)
+```
+
+```{r "import packages", include=FALSE}
+## packages for tidy and clean
+library(tidyverse)
+library(here)
+
+## packages for plots and colors
+library(ggplot2)
+library(ggthemes)
+library(rgdal)
+library(grid)
+library(gridExtra)
+library(RColorBrewer)
+
+## packages for tables
+library(gt)
+library(flextable)
+```
+
+```{r "import datasets"}
+merge <-
+  here::here(
+    "seven_twenty_four",
+    "new_data",
+    "724_merge_eligible.csv") %>%
+  read.csv(
+    row.names = 1,
+    check.names = F,
+    header = TRUE)
+
+
+alpha <-
+  here::here(
+    "seven_twenty_four",
+    "new_data",
+    "724_alpha_eligible.csv") %>%
+  read.csv(
+    row.names = 1,
+    check.names = F,
+    header = TRUE) %>%
+  rownames_to_column("Lib")
+
+
+meta <- 
+  here::here(
+    "seven_twenty_four",
+    "data",
+    "724_meta.csv") %>%
+  read_csv() %>%
+  select(SYSID, PatNo, everything()) %>%
+  as.data.frame()
+
+
+merge_alpha <- 
+  inner_join(meta, alpha, 
+             by = "Lib") %>%
+  filter(!is.na(SYSID))
+
+
+merge_eligible <- 
+  here::here(
+    "seven_twenty_four",
+    "new_data",
+    "724_merge_eligible.csv") %>%
+  read.csv(
+    row.names = 1,
+    check.names = F,
+    header = TRUE)
+```
+
+```{r "functions", echo=FALSE}
+## a function from Kayla
+## only keep the last level 
+## of the OTU_Names
+name_split <-
+  function(names) {
+    names <- names
+    save <- strsplit(names, "/")
+    h <- 0
+    for (i in 1:length(names)) {
+      h[i] <- length(save[[i]])
+    }
+    i <- 0
+    name.list <- NULL
+    for (i in 1:length(save)) {
+      name.list[i] <- save[[i]][h[i]]
+    }
+    return(name.list)
+  }
+
+
+## a small function to subset data
+## easier to use in map()
+select_eligible <- 
+  function(ID, dataset) {
+    dataset %>%
+      filter(SYSID == ID) %>%
+      select(SYSID, VISITNUM, contains("/")) %>%
+      rownames_to_column("Lib") %>%
+      unite("SYS", c("SYSID", "VISITNUM", "Lib")) %>%
+      janitor::adorn_totals("row") %>%
+      remove_rownames() %>%
+      column_to_rownames("SYS") %>%
+      t() %>%
+      as.data.frame() %>%
+      arrange(desc(Total)) %>%
+      head(12) %>%
+      select(-Total) %>%
+      t() %>%
+      as.data.frame() %>%
+      rownames_to_column("SYS") %>%
+      reshape2::melt(id.vars = "SYS",
+                     variable.name = "Taxa") %>%
+      mutate(Taxa = name_split(as.character(Taxa))) %>%
+      separate("SYS", into = c("SYSID", "VISITNUM", "Lib"))
+}
+
+## easier to use in map()
+select_ID <- 
+  function(ID, dataset) {
+    dataset %>%
+      filter(SYSID == ID)
+}
+
+
+```
+
+## Boxplots
+
+```{r echo=FALSE}
+plota1 <- merge_alpha %>%
+          mutate(VISITNUM = as.factor(VISITNUM)) %>%
+          ggplot(aes(x = VISITNUM, 
+                     y = `ShannonE Mean`),
+                 group = VISITNUM) +
+          geom_point(aes(color = VISITNUM)) +
+          geom_boxplot(aes(fill = VISITNUM)) +
+          theme_bw() +
+          labs(x = "visit times") +
+          ggthemes::scale_fill_tableau("Jewel Bright") + 
+          ## so far the best color composition
+          ggthemes::scale_colour_tableau("Jewel Bright") 
+          ## the tableau is in the ggthemes
+
+plota2 <- merge_alpha %>%
+          mutate(VISITNUM = as.factor(VISITNUM)) %>%
+          ggplot(aes(x = VISITNUM, 
+                     y = `ShannonH Mean`),
+                 group = VISITNUM) +
+          geom_point(aes(color = VISITNUM)) +
+          geom_boxplot(aes(fill = VISITNUM)) +
+          theme_bw() +
+          labs(x = "visit times") +
+          ggthemes::scale_fill_tableau("Jewel Bright") + 
+          ## so far the best color composition
+          ggthemes::scale_colour_tableau("Jewel Bright") 
+          ## the tableau is in the ggthemes
+
+plota3 <- merge_alpha %>%
+          mutate(VISITNUM = as.factor(VISITNUM)) %>%
+          ggplot(aes(x = VISITNUM, 
+                     y = `Sobs Mean`),
+                 group = VISITNUM) +
+          geom_point(aes(color = VISITNUM)) +
+          geom_boxplot(aes(fill = VISITNUM)) +
+          theme_bw() +
+          labs(x = "visit times") +
+          ggthemes::scale_fill_tableau("Jewel Bright") + 
+          ## so far the best color composition
+          ggthemes::scale_colour_tableau("Jewel Bright") 
+          ## the tableau is in the ggthemes 
+```
+
+```{r}
+plota1
+```
+
+\newpage
+
+```{r}
+plota2
+```
+
+\newpage
+
+```{r}
+plota3
+```
+
+\newpage
+
+## Relative Abundance
+
+```{r echo=FALSE, fig.height=6, fig.width=6}
+map(unique(merge_eligible$SYSID), 
+    select_eligible, 
+    merge_eligible) %>%
+  ## select_eligible() requires two arguments
+  ## "unique(merge_eligible$SYSID)" contains first arguments
+  ## "merge_eligible" is the second argument 
+  ## the results of this step will be 
+  ## 26 filtered ID datasets
+  ## see the "functions" chuck for details
+  map( ~ ggplot(., aes(x = VISITNUM, 
+                       y = value, 
+                       fill = Taxa)) + 
+         ## should have saved this function
+         ## probably add a ggsave() to pdf directly
+         geom_bar(stat = "identity") +
+         theme_bw() +
+         ggthemes::scale_fill_tableau("Classic Cyclic") + 
+         ## so far the best color compositions for bar plot
+         ## "Jewel Bright" only contains seven color
+         ggthemes::scale_colour_tableau("Classic Cyclic") + 
+         ## the tableau is in the ggthemes
+         labs(x = "Time of Visits") +
+         labs(y = "Relative Abundance") +
+         labs(x = "visit times") +
+         labs(y = "relative abundance") +
+         labs(title = unique(.$SYSID)) +
+         ylim(0, 1))
+```
+
+\newpage
+
+## Alpha Longitudinal
+
+```{r echo=FALSE, fig.height=4, fig.width=6, message=FALSE, warning=FALSE}
+
+map(unique(merge_eligible$SYSID), select_ID, merge_alpha) %>%
+  ## select_ID() requires two arguments
+  ## "unique(merge_eligible$SYSID)" contains first arguments
+  ## "merge_alpha" is the second argument 
+  ## the results of this step will be 
+  ## 26 fitlered ID datasets
+  ## see the "functions" chuck for details
+  map( ~ ggplot(data = ., aes(x = VISITNUM, group = SYSID)) +
+          geom_smooth(aes(y = `ShannonH Mean`, color = "ShannonH Mean"),  size = 1) +
+          geom_smooth(aes(y = `ShannonE Mean`, color = "ShannonE Mean"), size = 1) +
+          geom_smooth(aes(y = `Sobs Mean` / 20, color = "Sobs Mean"), size = 1) +
+          geom_line(aes(y = `ShannonH Mean`, color = "ShannonH Mean"),  size = 1) +
+          geom_line(aes(y = `ShannonE Mean`, color = "ShannonE Mean"), size = 1) +
+          geom_line(aes(y = `Sobs Mean` / 20, color = "Sobs Mean"), size = 1) +
+          geom_point(aes(y = `ShannonH Mean`, color = "ShannonH Mean"),  size = 2) +
+          geom_point(aes(y = `ShannonE Mean`, color = "ShannonE Mean"), size = 2) +
+          geom_point(aes(y = `Sobs Mean` / 20, color = "Sobs Mean"), size = 2) +
+          theme_bw() +
+          ylim(0, 5) +
+          scale_y_continuous(name = "Shannon Mean", limits = c(0, 5),
+            sec.axis = sec_axis(trans = ~. * 20, name = "Sob Mean")) +
+          labs(y = "Biodiversity") +
+          labs(x = "Visit Times") +
+         labs(title = .$SYSID) +
+          scale_color_discrete(name = "") +
+          guides(color = guide_legend(override.aes=list(fill=NA))) +
+          theme(legend.key = element_blank(),
+                legend.background = element_blank(),
+                legend.position = "bottom"))
+
+
+```
+
+\newpage
+
+## Lung Activity
+
+```{r echo=FALSE}
+map(unique(merge_eligible$SYSID), 
+    select_ID, merge_eligible) %>%
+  map_dfr(~ mutate(., Genotype = case_when(
+    (Genotypes1 == 'F508' & Genotypes2 == 'F508') ~ "\u0394F508/\u0394F508", 
+    (Genotypes1 == 'F508' & Genotypes2 != 'F508') ~ "\u0394F508/Other",
+    (Genotypes1 != 'F508' & Genotypes2 != 'F508') ~ "Other/Other")) %>%
+        filter(VISITNUM == 1) %>% 
+        select(SYSID, Age = AGE_YRS, Genotype,
+                 `FVC%\n(predicted)` = FVC_Pred,
+                 `FEV%\n(predicted)` = fev_wanghankpct,
+                 `FEV\n(slope)` = fevslope,
+                 `FVC\n(slope)` = fvcslope)) %>%
+  flextable::regulartable() %>%
+  flextable::autofit()
+```
+
+```{r echo=FALSE,message=FALSE, warning=FALSE}
+
+plotb1 <- merge_alpha %>%
+  ggplot(aes(x = VISITNUM, 
+             y = `ShannonE Mean`,
+             group = SYSID,
+             color = factor(SYSID))) +
+  geom_point() +
+  geom_line(alpha = 0.7) +
+  geom_smooth(aes(group = 1), 
+              method = "loess",
+              size = 1) +
+  theme_bw() +
+  guides(color = guide_legend(override.aes=list(fill=NA))) +
+  ylab("ShanninE Mean") +
+  xlab("Visit Times") +
+  facet_wrap("SYSID") +
+  theme(legend.position = "none")
+
+
+plotb2 <- merge_alpha %>%
+  ggplot(aes(x = VISITNUM, 
+             y = `ShannonH Mean`,
+             group = SYSID,
+             color = factor(SYSID))) +
+  geom_point() +
+  geom_line(alpha = 0.7) +
+  geom_smooth(aes(group = 1), 
+              method = "loess",
+              size = 1) +
+  theme_bw() +
+  guides(color = guide_legend(override.aes=list(fill=NA))) +
+  ylab("ShanninH Mean")+
+  xlab("Visit Times") +
+  facet_wrap("SYSID") +
+  theme(legend.position = "none")
+
+
+plotb3 <- merge_alpha %>%
+  ggplot(aes(x = VISITNUM, 
+             y = `Sobs Mean`,
+             group = SYSID,
+             color = factor(SYSID))) +
+  geom_point() +
+  geom_line(alpha = 0.7) +
+  geom_smooth(aes(group = 1), 
+              method = "loess",
+              size = 1) +
+  theme_bw() +
+  guides(color = guide_legend(override.aes=list(fill=NA))) +
+  ylab("Sobs Mean") +
+  xlab("Visit Times") +
+  facet_wrap("SYSID") +
+  theme(legend.position = "none")
+```
+
+\newpage
+
+## Alpha Facet
+
+```{r  fig.height=10, fig.width=15}
+plotb1
+
+```
+
+\newpage
+
+```{r  fig.height=10, fig.width=15}
+plotb2
+
+```
+
+\newpage
+
+```{r  fig.height=10, fig.width=15}
+plotb3
+
+```

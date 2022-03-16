@@ -1,0 +1,132 @@
+---
+title: "05_boxplot_morisita_horn"
+author: "Randy"
+date: "9/14/2020"
+output:
+  html_document:
+    df_print: paged
+  word_document:
+    reference_docx: template.docx
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+## Load library
+# library(readr)
+library(readxl)
+library(tidyverse)
+library(here)
+
+library(ggplot2)
+library(RColorBrewer)
+
+library(stringr)
+
+# library(diagonals)
+# library(schoolmath)
+# library(RGraphics)
+
+# library(reshape2)
+# library(matrixStats)
+# library(matrixTests)
+
+devtools::session_info()
+```
+
+```{r dataset}
+MH <- 
+  here::here("background",
+             "data",
+             "Morisita_Horn_Matrix.csv") %>%
+  read.csv(row.name = 1)
+
+MH_remove <-
+  here::here("background",
+             "data",
+             "Morisita_Horn_RemoveT.csv") %>%
+  read.csv(row.name = 1) 
+
+
+MAT_RA_lq <-
+  here::here("background",
+             "data",
+             "Background_RA_loading.csv") %>%
+  read.csv(row.name = 1) 
+```
+ 
+
+```{r "boxplot1", fig.height=5, fig.width=10}
+Plot_A <- 
+  ggplot(MH, aes(Category, MH, label = outlier)) +
+  geom_jitter(aes(Category, MH, col = Category), 
+                shape=16, position = position_jitter(0.3), 
+                alpha = 0.8, show.legend = F) +
+  geom_boxplot(aes(Category, MH, fill = Category), 
+               show.legend = F) +
+  ylab("Morisita-Horn Index") + 
+  xlab("Group Pairs") +
+  theme_classic() +
+  ggthemes::scale_fill_tableau("Jewel Bright") + 
+  ## so far the best color composition
+  ggthemes::scale_colour_tableau("Jewel Bright") + 
+  ## the tableau is in the ggthemes
+  ggtitle("Boxplot of Morisita-Horn Index", 
+          "Different Pair Comparison") 
+
+## `palette` must be one of:
+## Tableau 10, Tableau 20, Color Blind, Classic Cyclic,
+## Traffic, Miller Stone, Superfishel Stone, 
+## Nuriel Stone, Jewel Bright, Summer, Classic 10, 
+## Green-Orange-Teal, Red-Blue-Brown, Seattle Grays,
+## Purple-Pink-Gray, Hue Circle, Classic Blue-Red 12, 
+## Classic 10 Medium, Classic 10 Light, Winter, 
+## Classic 20, Classic Gray 5, Classic Color Blind, 
+## Classic Traffic Light, Classic Purple-Gray 6, 
+## Classic Purple-Gray 12, Classic Green-Orange 6, 
+## Classic Green-Orange 12, Classic Blue-Red 6.
+
+Plot_A
+
+## the kruskal and wilcox are not good for the test, due to the correlation 
+# kruskal.test(data=MH, MH~Category)
+# pairwise.wilcox.test(x=MH$MH, g=MH$Category, p.adjust.method = "fdr")
+
+Plot_A + geom_text(position = 'jitter', 
+                   stat = 'identity', 
+                   hjust=0.1, vjust=0.1, 
+                   size=2) 
+## geom_text need arguement "label" in ggplot()
+```
+
+```{r "boxplot2", fig.height=5, fig.width=10}
+Plot_A2 <- 
+  ggplot(MH_remove, aes(Category, MH_remove, label=outlier)) +
+  geom_jitter(aes(Category, MH_remove, col=Category), 
+              shape=16, position=position_jitter(0.3), 
+              alpha = 0.8, show.legend = F) +
+  geom_boxplot(aes(Category, MH_remove, fill=Category), 
+               show.legend = F) +
+  ylab("Morisita-Horn Index") + 
+  xlab("Group Pairs") +
+  theme_classic() +
+  ggthemes::scale_fill_tableau("Jewel Bright") + 
+  ## so far the best color composition
+  ggthemes::scale_colour_tableau("Jewel Bright") + 
+  ## the tableau is in the ggthemes
+  ggtitle("Boxplot of Morisita-Horn Index", 
+          "Different Pair Comparison") 
+
+Plot_A2
+
+## the kruskal and wilcox are not good for the test, due to the correlation 
+# kruskal.test(data=MH, MH~Category)
+# pairwise.wilcox.test(x=MH$MH, g=MH$Category, p.adjust.method = "fdr")
+
+Plot_A2 + 
+  geom_text(position = 'jitter', 
+            stat = 'identity', 
+            hjust=0.1, 
+            vjust=0.1, 
+            size=2) 
+## geom_text need arguement "label" in ggplot()
+```

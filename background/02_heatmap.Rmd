@@ -1,0 +1,302 @@
+---
+title: "02_heatmap"
+author: "Randy"
+date: "9/14/2020"
+output:
+  html_document:
+    df_print: paged
+  word_document:
+    reference_docx: template.docx
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(tidyverse)
+library(here)
+
+library(dendsort)
+library(pheatmap)
+
+library(RColorBrewer)
+library(viridisLite)
+```
+
+
+```{r functions in this project}
+
+## decide the outlier out of 4*IQR
+is_outlier <- 
+  function(x) {
+    return(x < quantile(x, 0.25) - 1.5 * IQR(x) |
+             x > quantile(x, 0.75) + 1.5 * IQR(x))
+    }
+
+## split the taxum names from OTU_names
+## return the last level
+## Thanks Kayla for the code
+## Example: 01 Dataset.Rmd
+## Line: 20
+name_split <- function(names){
+      names = names
+      save = strsplit(names, "/")
+      h = 0
+      for(i in 1:length(names)){
+        h[i] = length(save[[i]])}
+      i = 0
+      name.list = NULL
+      for(i in 1:length(save)){
+        name.list[i] = save[[i]][h[i]]}
+      return(name.list)
+      }
+
+## rearrange the dendrogram phelogeny tree
+## example in 02 Heatmap.Rmd
+## Line: 26
+sort_hclust <- function(x) 
+      as.hclust(dendsort::dendsort(as.dendrogram(x)))
+
+
+## set up the quantile scale level for the heatmap
+## not used in this project
+## useful to setup a quantile break heatmap
+quantile_breaks <- function(xs, n = 10) {
+      breaks <- quantile(xs, probs = seq(0 , 1, length.out = n))
+      breaks[!duplicated(breaks)]
+      }
+```
+
+
+```{r}
+## import the dataset or just run 
+## all the .Rmd files one by one
+MAT_RA <- 
+  here::here("background", 
+             "data",
+             "Background_Merge_clean.csv") %>%
+  read.csv(row.names = 1) 
+
+```
+
+```{r Cluster, echo=FALSE, fig.height=10, fig.width=30}
+mat_cluster_rows <- hclust(dist(t(MAT_RA[, 5:ncol(MAT_RA)]))) 
+## hclust() is the function to arrange the phylogeny tree
+plot(mat_cluster_rows, 
+     main = "Unsorted Dendrogram", 
+     xlab = "", sub = "")
+
+mat_cluster_rows_sort <- sort_hclust(mat_cluster_rows)
+## sort_hclust() is a function
+## Details in 00 Function.Rmd
+## Line: 39
+
+plot(mat_cluster_rows_sort, 
+     main = "Sorted Dendrogram", 
+     xlab = "", sub = "")
+
+mat_cluster_colors <- hclust(dist(MAT_RA[, 5:ncol(MAT_RA)]))
+plot(mat_cluster_rows, 
+     main = "Unsorted Dendrogram", 
+     xlab = "", sub = "")
+
+mat_cluster_colors_sort <- sort_hclust(mat_cluster_colors)
+plot(mat_cluster_colors_sort, 
+     main = "Sorted Dendrogram", 
+     xlab = "", sub = "")
+```
+
+
+```{r heatmap colors option}
+## colorRampPalette() can smear the discrete colors 
+## get more options than the color palette
+## 
+## Color Choices:
+## "#e7f0fa", "#c9e2f6", "#95cbee", "#0099dc", 
+## "#4ab04a", "#ffd73e", "#eec73a", "#e29421", 
+## "#e29421", "#f05336", "#ce472e"
+
+## to show the color names inbetween    number of colors
+## colorRampPalette(c("white", "blue"))(90): 
+## "#FFFFFF", "#FCFCFF", "#F9F9FF", "#F6F6FF", 
+## "#F3F3FF", "#F0F0FF", "#EDEDFF", "#EAEAFF", 
+
+colors <- c(colorRampPalette(c("white", "#2CA030"), bias=2)(100),
+          ## the function requires the distinct colors
+          ## higher values give more widely spaced colors
+          ## how many levels for each group of color
+          colorRampPalette(c("#2CA030", "#E39802"), bias=2)(100),
+          colorRampPalette(c("#E39802", "#F9B23C", "#FF684C"), bias=2)(200),
+          colorRampPalette(c("#FF684C", "#E03531", "#B60A1C", "black"), bias=2)(600))
+          ## all the colors will be saved
+          ## as the text form in a vector
+## length(quantile_breaks(t(as.matrix(MAT_RA3[, 5:40])), n = 20))
+## length(colors)
+## brewer.pal(12, "Reds")
+```
+
+```{r "heatmap for clustered groups", fig.height=11, fig.width=30}
+## RA matrix grouped by Groups
+MAT_RA1 <- 
+  MAT_RA %>%  
+  arrange(Group) 
+
+## pheatmap function parameters
+mat_col1 <- 
+  data.frame(
+    group = MAT_RA1$Group, 
+    plate = MAT_RA1$Plates, 
+    loading = as.numeric(MAT_RA1$lq_all))
+
+rownames(mat_col1) <- rownames(MAT_RA1)
+
+## legend color choice
+color1 <- 
+  c(  "#e6194b", "#f58231", "#ffe119",
+    "#bcf60c", "#3cb44b", "#46f0f0",
+    "#4346d8", "#911eb4", "#f032e6",
+    "#808080", "#800000", "#9a6324",
+    "#808000", "#008080", "#000075",
+    "#000000")
+
+## other options for the color
+# color1 <- c("#FF0000", "#FF6000", "#FFBF00", 
+#           "#DFFF00", "#80FF00", "#20FF00", 
+#           "#00FF40", "#00FF9F", "#00FFFF", 
+#           "#009FFF", "#0040FF", "#2000FF", 
+#           "#8000FF", "#DF00FF", "#FF00BF", 
+#           "#FF0060")
+
+mat_colors1 <- 
+  list(group = brewer.pal(3, "Set1"), 
+       plate = color1)
+       ## use the brewer.pal colors
+       ## pay attention to the max number
+       ## colors you can get there
+
+names(mat_colors1$group) <- unique(MAT_RA1$Group)
+names(mat_colors1$plate) <- unique(MAT_RA1$Plates)
+
+## plot the pheatmap
+pheatmap(
+  mat = t(as.matrix(MAT_RA1[, 5:ncol(MAT_RA1)])), 
+  ## matrix need to be applied
+  ## transpose the matrix
+  color = colors, 
+  ## colors from line86
+  border_color = "grey60",
+  cluster_rows = F,  
+  ## hide the taxa cluster
+  cluster_colors = T,
+  show_colnames = T,
+  show_rownames = T,
+  drop_levels = T,
+  annotation_col = mat_col1,
+  annotation_colors = mat_colors1,
+  treeheight_col = 100,
+  fontsize = 10,
+  frontsize_row = 8,
+  frontsize_col = 8,
+  main  = "Heatmap Quantile - Group - Clustered")
+
+```
+
+```{r "heatmap for groups", fig.height=10, fig.width=30}
+## details see "heatmap for clustered groups" 
+pheatmap(
+  mat = t(as.matrix(MAT_RA1[, 5:ncol(MAT_RA1)])),
+  color = colors,
+  border_color = "grey60",
+  cluster_rows = F,
+  cluster_colors = F,
+  show_colnames = T,
+  show_rownames = T,
+  drop_levels = T,
+  treeheight_col = 100,
+  annotation_col = mat_col1,
+  annotation_colors = mat_colors1,
+  fontsize = 10,
+  frontsize_row = 8,
+  frontsize_col = 8,
+  main  = "Heatmap Quantile - Group - Unclustered")
+```
+
+
+```{r "heatmap for plates", fig.height=10, fig.width=30}
+## rearrange the dataset as grouped by plates
+MAT_RA2 <- 
+  MAT_RA %>%  
+  arrange(Plates)
+
+## setup the color options for plates
+mat_col2 <- 
+  data.frame(
+    plate = MAT_RA2$Plates, 
+    group = MAT_RA2$Group, 
+    loading = as.numeric(MAT_RA2$lq_all))
+
+rownames(mat_col2) <- rownames(MAT_RA2)
+
+mat_colors2 <- list( plate = color1, 
+                     group = brewer.pal(3, "Set1"))
+
+names(mat_colors2$group) <- unique(MAT_RA2$Group)
+names(mat_colors2$plate) <- unique(MAT_RA2$Plates)
+
+pheatmap(
+  mat = t(as.matrix(MAT_RA2[, 5:ncol(MAT_RA2)])),
+  color = colors,
+  border_color = "grey60",
+  show_colnames = T,
+  show_rownames = T,
+  cluster_rows = F,
+  cluster_colors = F,
+  drop_levels = T,
+  annotation_col = mat_col2,
+  annotation_colors = mat_colors2,
+  fontsize = 10,
+  frontsize_row = 8,
+  frontsize_col = 8,
+  main  = "Heatmap Quantile - Plate - Unclustered")
+```
+
+
+```{r "heatmap for position", fig.height=10, fig.width=30}
+## rearrange the dataset as grouped by positions
+MAT_RA3 <- MAT_RA %>%  arrange(Real) 
+
+## setup the color options for position
+mat_col3 <- 
+  data.frame(
+    plate = MAT_RA3$Plates,
+    group = MAT_RA3$Group, 
+    position = MAT_RA3$Real,
+    loading = as.numeric(MAT_RA2$lq_all))
+
+rownames(mat_col3) <- rownames(MAT_RA3)
+
+mat_colors3 <- 
+  list( 
+    plate = color1,
+    group = brewer.pal(3, "Set1"), 
+    position = brewer.pal(12, "Set3"))
+
+names(mat_colors3$group) <- unique(MAT_RA3$Group)
+names(mat_colors3$plate) <- unique(MAT_RA3$Plates)
+names(mat_colors3$position) <- unique(MAT_RA3$Real)
+
+pheatmap(
+  mat = t(as.matrix(MAT_RA3[, 5:ncol(MAT_RA)])),
+  color = colors,
+  border_color = "grey60",
+  show_colnames = T,
+  show_rownames = T,
+  cluster_rows = F,
+  cluster_colors = F,
+  drop_levels = T,
+  annotation_col = mat_col3,
+  annotation_colors = mat_colors3,
+  fontsize = 10,
+  frontsize_row = 8,
+  frontsize_col = 8,
+  main  = "Heatmap Quantile - Position - Unclustered")
+```

@@ -1,0 +1,40 @@
+---
+title: "00 Setup"
+author: "Randy"
+date: "9/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Load Libraries, message=FALSE, warning=FALSE}
+# Load Libraries, to check each tibble, use View(tibble_name) function
+# for certain code with # at the beginning, you can press Ctrl+Shift+C to return it into runnable code
+
+## Clear existing caregiver_clean and graphics
+rm(list=ls())
+graphics.off()
+
+library(vegan)
+
+library(ggplot2)
+library(RGraphics)
+library(gridExtra)
+library(grid)
+
+library(xtable)
+library(tidyverse)
+
+library(reshape2)
+library(Matrix)
+
+library(schoolmath)
+library(diagonals)
+library(matrixStats)
+library(matrixTests)
+library(exactRankTests)
+
+devtools::session_info()
+```

@@ -1,0 +1,75 @@
+---
+title: "01 Import data"
+author: "Randy"
+date: "9/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Read data, message=FALSE, warning=FALSE}
+# load the data, if you do not know exactly the path
+# you can use Import Dataset in the Environment window -> from text (readr) -> Browser
+# there is more option to manipulate the data in this way
+
+setwd("C:/Users/Goodgolden5/Desktop/Project/BIOS0001-Wagner-20190901")
+
+Digest_alpha <- read_delim("Digest_alpha_20191219.txt", "\t", 
+                           escape_double=FALSE, trim_ws=TRUE)  %>% as_tibble()
+Digest_counts <- read_delim("Digest_counts_20191219.txt", "\t", 
+                            escape_double = FALSE, trim_ws = TRUE) %>% as_tibble() 
+Digest_MH <- read_delim("Digest_MH_20191219.txt", "\t", 
+                        escape_double = FALSE, trim_ws = TRUE) %>% as_tibble()
+Digest_RA <- read_delim("Digest_RA_20191219.txt", "\t", 
+                        escape_double = FALSE, trim_ws = TRUE) %>% as_tibble()
+
+# View(Digest_alpha)
+# View(Digest_counts)
+# View(Digest_MH)
+# View(Digest_RA)
+```
+
+```{r Relative Abundance, message=FALSE, warning=FALSE}
+DigestCounts <- Digest_counts %>% 
+  # the digests counts now is a tibble form
+  remove_rownames %>% 
+  # set the OTU_Names as the rownames
+  column_to_rownames(var="OTU_Name") 
+  # colunm_to_rownames and rownames_to_column is very easy to use
+
+DigestCounts["root", ] <- DigestCounts["root", ] - 
+                          (DigestCounts["Unclassified", ] + DigestCounts["Bacteria", ])
+                          # adjust root
+
+DigestRel <- DigestCounts %>% 
+  rownames_to_column("OTU_Name") %>% 
+  # set the rownames as OTU_Names
+  filter(OTU_Name!="Unclassified") %>% 
+  # delect the Unclassified
+  filter(OTU_Name!="Bacteria") %>% 
+  # delect the Bacteria
+  column_to_rownames("OTU_Name") %>%
+  t() %>% 
+  # set the ID as the columnnames
+  # but tidyverse does not have this function, 
+  # so we have to tranform the matrix
+  # in order to use column_to_rownames
+  as.data.frame() %>% 
+  # after transpose, the dataset is a matrix
+  # so need to set up as data.frame again
+  rownames_to_column("ID") %>%
+  mutate_at(vars(-ID, -root), funs(. / root)) %>% 
+  # calculate the ratio except the Total
+  column_to_rownames("ID") %>% 
+  select(-root) %>%
+  t() %>% 
+  # now transpose the data.frame back
+  as.data.frame() %>% 
+  # do not forget set the matrix to data.frame again
+  rownames_to_column("OTU_Name") 
+  # now the column name is the ID, 
+  # we need to use the OTU_Names for selection, 
+  # so just turn the rownames back to column
+```

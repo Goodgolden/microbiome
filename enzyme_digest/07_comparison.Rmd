@@ -1,0 +1,182 @@
+---
+title: '07 General Level Comparisons'
+author: "Randy"
+date: "9/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r General Level Comparisons OP}
+AbsoluteRel_OP_D <- 
+  DigestRel_OP %>%
+  filter( OTU_Name %in% DigestRel_OP_Names) %>%
+  column_to_rownames("OTU_Name") %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column("Collection") %>%
+  separate(Collection, into = c("Method","ID"), sep = 1) %>% 
+  # set up the Method and ID
+  separate(ID, into = c("ID","EnzD"), sep = 4) %>% 
+  # set up the digestion method
+  mutate(EnzD = replace(EnzD, EnzD != "D", "N")) %>%
+  filter(EnzD == "D") %>%
+  select(-Method, -EnzD) %>%
+  column_to_rownames("ID")
+
+AbsoluteRel_OP_N <- 
+  DigestRel_OP %>%
+  filter( OTU_Name %in% DigestRel_OP_Names) %>%
+  column_to_rownames("OTU_Name") %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column("Collection") %>%
+  separate(Collection, into = c("Method", "ID"), sep = 1) %>% 
+  # set up the Method and ID
+  separate(ID, into = c("ID","EnzD"), sep = 4) %>% 
+  # set up the digestion method
+  mutate(EnzD = replace(EnzD, EnzD != "D", "N")) %>%
+  filter(EnzD == "N") %>%
+  select(-Method, -EnzD) %>%
+  column_to_rownames("ID")
+
+Wilcoxon_OP1 <- 
+  map2(AbsoluteRel_OP_D, 
+       AbsoluteRel_OP_N, 
+       .f = wilcoxon_pair_row)
+        # this wilcoxon_pair_row() is in
+        # Rmd file: 00 Function.Rmd
+        # Line54
+        # to see details 
+
+Wilcoxon_OP_est <- 
+  Wilcoxon_OP1 %>% 
+  # ?????? 
+  # why "map(return(.$estimate))" does not work
+  # ??????
+  map(function(x) return(x$estimate)) %>%
+  unlist() %>%
+  round(4) %>%
+  as.data.frame() %>%
+  transmute(`Change%` = . * 100)
+
+Wilcoxon_OP_pval <- 
+  Wilcoxon_OP1 %>% 
+  map(function(x) 
+    return(x$p.value)) %>%
+  unlist() %>%
+  p.adjust(method = "BH") %>%
+  signif(2) %>%
+  as.data.frame() %>%
+  rename(`p-value`= ".") %>%
+  ifelse(.$`p-value` <= 0.01, 
+         "<0.01", .) %>%
+  as.data.frame() %>%
+  rename(`p-value` = ".")
+
+AbsoluteRel_OP_D_Median <- 
+  AbsoluteRel_OP_D %>%
+  t() %>%
+  as.matrix() %>%
+  rowMedians() %>%
+  round(4) %>%
+  as.data.frame() %>%
+  transmute(`EnzD %` = . * 100) 
+
+AbsoluteRel_OP_N_Median <- 
+  AbsoluteRel_OP_N %>%
+  t() %>%
+  as.matrix() %>%
+  rowMedians() %>%
+  round(4) %>%
+  as.data.frame() %>%
+  transmute(`NonD %` = . * 100)
+```
+
+
+```{r General Level Comparisons SP}
+AbsoluteRel_SP_D <- 
+  DigestRel_SP %>%
+  filter( OTU_Name %in% DigestRel_SP_Names) %>%
+  column_to_rownames("OTU_Name") %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column("Collection") %>%
+  separate(Collection, into = c("Method", "ID"), sep = 1) %>% 
+  # set up the Method and ID
+  separate(ID, into = c("ID", "EnzD"), sep = 4) %>% 
+  # set up the digestion method
+  mutate(EnzD = replace(EnzD, EnzD!="D", "N")) %>%
+  filter(EnzD == "D") %>%
+  select(-Method, -EnzD) %>%
+  column_to_rownames("ID")
+
+AbsoluteRel_SP_N <- 
+  DigestRel_SP %>%
+  filter( OTU_Name %in% DigestRel_SP_Names) %>%
+  column_to_rownames("OTU_Name") %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column("Collection") %>%
+  separate(Collection, into = c("Method","ID"), sep = 1) %>% 
+  # set up the Method and ID
+  separate(ID, into = c("ID", "EnzD"), sep = 4) %>% 
+  # set up the digestion method
+  mutate(EnzD = replace(EnzD, EnzD != "D", "N")) %>%
+  filter(EnzD == "N") %>%
+  select(-Method, -EnzD) %>%
+  column_to_rownames("ID")
+
+Wilcoxon_SP1 <- 
+  map2(AbsoluteRel_SP_D, 
+       AbsoluteRel_SP_N, 
+       .f = wilcoxon_pair_row)
+
+Wilcoxon_SP_est <- 
+  Wilcoxon_SP1 %>% 
+  # ?????? 
+  # why "map(return(.$estimate))" not work
+  # ??????
+  map(function(x) 
+    return(x$estimate)) %>%
+  unlist() %>%
+  round(4) %>%
+  as.data.frame() %>%
+  transmute(`Change%` = . * 100)
+
+Wilcoxon_SP_pval <- 
+  Wilcoxon_SP1 %>% 
+  map(function(x) return(x$p.value)) %>%
+  unlist() %>%
+  p.adjust(method="BH") %>%
+  round(2) %>%
+  as.data.frame() %>%
+  rename(`p-value` = ".") 
+
+Wilcoxon_SP_pval <- 
+  ifelse(Wilcoxon_SP_pval$`p-value` <= 0.01, 
+         "<0.01", 
+         Wilcoxon_SP_pval$`p-value`) %>%
+  as.data.frame() %>%
+  rename(`p-value` = ".")
+  
+AbsoluteRel_SP_D_Median <- 
+  AbsoluteRel_SP_D %>%
+  t() %>%
+  as.matrix() %>%
+  rowMedians() %>%
+  round(4) %>%
+  as.data.frame() %>%
+  transmute(`EnzD %` = . * 100) 
+
+AbsoluteRel_SP_N_Median <- 
+  AbsoluteRel_SP_N %>%
+  t() %>%
+  as.matrix() %>%
+  rowMedians() %>%
+  round(4) %>%
+  as.data.frame() %>%
+  transmute(`NonD %` = . * 100)
+```

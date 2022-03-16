@@ -1,0 +1,155 @@
+---
+title: '04 Beta Diversity'
+author: "Randy"
+date: "9/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(include = FALSE)
+```
+
+```{r >1% Relative Abundance OP}
+DigestRel_OP <- DigestRel %>%
+  select(OTU_Name, contains("C")) %>% 
+  # select all the samples with "C" or OP
+  filter(`OTU_Name` != "root")
+
+DigestRel_OP_Med_row <- DigestRel_OP %>% 
+  # to find the median of each OTU_name
+  column_to_rownames("OTU_Name") %>%
+  as.matrix() %>%
+  rowMedians() %>% 
+  # rowMedians() is to calculate the Median for each row
+  # to get the columnMedians just transpose the data.frame
+  as.data.frame() %>%
+  rename(Median = ".") %>% 
+  # can also used the mutate() function
+  cbind(DigestRel_OP) %>% 
+  # if use mutate(), do not need to cbind with orginial data anymore
+  select(OTU_Name, Median, everything()) # reorder
+
+DigestRel_OP_Names <- DigestRel_OP_Med_row %>%
+  filter(`Median` >= 0.01) %>% 
+  # only get teh Median >= 0.01 names
+  select(OTU_Name) %>% 
+  remove_rownames() %>% 
+  # now the data is one column data.frame
+  unlist() %>% 
+  as.character()
+
+DigestCounts_OP <- DigestCounts %>%
+  rownames_to_column(var = ("OTU_Name")) %>%
+  filter( OTU_Name %in% DigestRel_OP_Names) %>%
+  select("OTU_Name", contains("C")) %>% 
+  # select all the samples with "C" or OP
+  mutate(Species=name.split(OTU_Name)) %>% 
+  # use this function to split the taxa names
+  # details in Rmd file: 00 Function
+  # Line13
+  select(Species, everything()) %>%
+  select(-OTU_Name) %>%
+  column_to_rownames(var="Species") %>%
+  t() %>%
+  as.data.frame()
+```
+
+```{r PCOA_OP}
+PCoA_OP <- DigestCounts_OP %>%
+  vegdist(method="morisita") %>% 
+  # need more reading to learn this function
+  cmdscale() %>% 
+  # morisita 
+  as.data.frame() %>%
+  select(Dim1=`V1`, Dim2=`V2`)
+
+Species_OP <- envfit(PCoA_OP, DigestCounts_OP)
+
+Species_OP_df <- as.data.frame(
+  cbind(Species_OP$vectors$arrows*sqrt(Species_OP$vectors$r),
+        Species_OP$vectors$pvals)) %>%
+  head(7)
+
+Species_OP_df$Species<-rownames(Species_OP_df)
+
+colnames(Species_OP_df)<-c("Dim1","Dim2","Pvals","Species")
+# Species_OP_df<-Species_OP_df[Species_OP_df$Pvals<.005,]
+
+DataSet_OP <- cbind(PCoA_OP, DigestCounts_OP) %>%
+  rownames_to_column(var="Collection") %>%
+  separate(Collection, into=c("Method","ID"), sep=1) %>% 
+  # set up the Method and ID
+  separate(ID, into=c("ID","EnzD"), sep=4) %>% 
+  # set up the digestion method
+  mutate(EnzD=replace(EnzD, EnzD!="D", "N")) 
+  # add variable for digestion
+```
+
+
+```{r >1% Relative Abundance SP}
+DigestRel_SP <- DigestRel %>%
+  select("OTU_Name", contains("E")) %>% 
+  # select all the samples with "E" or SP
+  select("OTU_Name", order(colnames(.))) %>%
+  filter(`OTU_Name` != "root")
+
+DigestRel_SP_Med_row <- DigestRel_SP %>%
+  column_to_rownames("OTU_Name") %>%
+  as.matrix() %>%
+  rowMedians() %>%
+  as.data.frame() %>%
+  rename(Median=".") %>%
+  cbind(DigestRel_SP) %>%
+  select(OTU_Name, Median, everything())
+
+DigestRel_SP_Names <- DigestRel_SP_Med_row %>%
+  filter(`Median`>=0.01) %>%
+  select(OTU_Name) %>%
+  remove_rownames() %>%
+  unlist() %>%
+  as.character()
+
+DigestCounts_SP <- DigestCounts %>%
+  rownames_to_column(var=("OTU_Name")) %>%
+  filter( OTU_Name %in% DigestRel_SP_Names) %>%
+  select("OTU_Name", contains("E")) %>% 
+  # select all the samples with "E" or SP
+  select("OTU_Name", order(colnames(.))) %>%
+  mutate(Species=name.split(OTU_Name)) %>%
+  select(Species, everything()) %>%
+  select(-OTU_Name) %>%
+  column_to_rownames(var="Species") %>%
+  t() %>%
+  as.data.frame()
+```
+
+```{r PCOA_SP}
+PCoA_SP <- DigestCounts_SP %>%
+  vegdist(method="morisita") %>%
+  cmdscale() %>%
+  as.data.frame() %>%
+  select(Dim1=`V1`, Dim2=`V2`)
+
+Species_SP <- envfit(PCoA_SP, DigestCounts_SP)
+
+Species_SP_df <- as.data.frame(
+  cbind(Species_SP$vectors$arrows*sqrt(Species_SP$vectors$r), 
+        Species_SP$vectors$pvals)) %>% 
+  head(7)
+
+Species_SP_df$Species <- rownames(Species_SP_df)
+
+colnames(Species_SP_df) <- c("Dim1","Dim2","Pvals","Species")
+# Species_SP_df<-Species_SP_df[Species_SP_df$Pvals<.005,]
+
+DataSet_SP <- cbind(PCoA_SP, DigestCounts_SP) %>%
+  rownames_to_column(var="Collection") %>%
+  separate(Collection, into=c("Method","ID"), sep=1) %>% 
+  # set up the Method and ID
+  separate(ID, into=c("ID","EnzD"), sep=4) %>% 
+  # set up the digestion method
+  mutate(EnzD=replace(EnzD, EnzD!="D", "N")) 
+  # add variable for digestion
+```
+
+

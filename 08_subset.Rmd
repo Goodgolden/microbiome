@@ -1,0 +1,375 @@
+---
+title: "05_subset_bayesian"
+author: "Randy"
+date: "2/9/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      cache = TRUE)
+
+library(tidyverse)
+library(forcats)
+library(ggthemes)
+library(scales)
+library(pheatmap)
+library(RColorBrewer)
+
+library(rstan)
+library(brms)
+library(bayesplot)
+library(loo)
+library(HDInterval)
+library(shinystan)
+library(rstanarm)
+
+R.Version()
+rstan::stan_version()
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+count_gather <- 
+  here::here("seven_twenty_four",
+             "data",
+             "count_gather_20210208.csv") %>%
+  read_csv() %>%
+  janitor::clean_names() %>%
+  select(counting, age, elast, sid, species, root)
+
+```
+
+```{r}
+count_trio <- count_gather %>%
+  filter(species %in% c("Staphylococcus",
+                        "Haemophilus",
+                        "Pseudomonasplus"))
+
+cout_duo <- count_gather %>%
+  filter(species %in% c("Haemophilus",
+                        "Staphylococcus"))
+
+count_sta <- count_gather %>%
+  filter(species == "Staphylococcus")
+
+count_hae <- count_gather %>%
+  filter(species == "Haemophilus")
+
+count_pse <- count_gather %>%
+  filter(species == "Pseudomonasplus")
+```
+
+```{r}
+poisson_trio <-
+  lme4::glmer(
+    counting ~
+      -1 + age + scale(elast) +
+      age * species + scale(elast) * species +
+      (1 + age | sid) +
+      (1 + age | sid:species) +
+      offset(log(root)),
+    family = poisson(link = "log"),
+    data = count_trio)
+
+negb_trio <-
+  lme4::`glmer.nb`(
+    counting ~
+      -1 + age + scale(elast) +
+      age * species + scale(elast) * species +
+      (1 + age | sid) +
+      (1 + age | sid:species) +
+      offset(log(root)),
+    data = count_trio)
+
+poission_trio_tidy <- broom.mixed::tidy(poisson_trio)
+negb_trio_tidy <- broom.mixed::tidy(negb_trio)
+```
+
+```{r}
+poisson_three <- 
+  lme4::glmer(
+    counting ~ 
+      -1 + 
+      age * species + scale(elast) * species + 
+      (1 |sid) +
+      offset(log(root)),
+    family = poisson(link = "log"),
+    data = count_trio)
+
+negb_three <- 
+  lme4::`glmer.nb`(
+    counting ~ 
+      -1 + 
+      age * species + scale(elast) * species +
+      offset(log(root)),
+    data = count_trio)
+
+poission_three_tidy <- broom::tidy(poisson_three)
+negb_three_tidy <- broom.mixed::tidy(negb_three)
+```
+
+```{r}
+poisson_sta <- 
+  lme4::glmer(
+    counting ~ 
+      1 + age + scale(elast) + 
+      (1 |sid) + 
+      offset(log(root)),
+    family = poisson(link = "log"),
+    data = count_sta)
+negb_sta <- 
+  lme4::`glmer.nb`(
+    counting ~ age + 
+      scale(elast) + 
+      (1 |sid) + 
+      offset(log(root)),
+    data = count_sta)
+poission_sta_tidy <- broom.mixed::tidy(poisson_sta)
+negb_sta_tidy <- broom.mixed::tidy(negb_sta)
+
+
+poisson_pse <- 
+  lme4::glmer(
+    counting ~ 1 + age + scale(elast) + 
+      (1 + age|sid) + 
+      offset(log(root)),
+    family = poisson(link = "log"),
+    data = count_pse)
+negb_pse <- 
+  lme4::`glmer.nb`(
+    counting ~ 1 + age + scale(elast) + 
+      (1 + age|sid) + 
+      offset(log(root)),
+    data = count_pse)
+poission_pse_tidy <- broom.mixed::tidy(poisson_pse)
+negb_pse_tidy <- broom.mixed::tidy(negb_pse)
+
+
+poisson_hae <- 
+  lme4::glmer(
+    counting ~ 1 + age + scale(elast) + 
+      (1 + age|sid) + 
+      offset(log(root)),
+    family = poisson(link = "log"),
+    data = count_hae)
+negb_hae <- 
+  lme4::`glmer.nb`(
+    counting ~ 1 + age + scale(elast) + 
+      (1 + age|sid) + 
+      offset(log(root)),
+    data = count_hae)
+poission_hae_tidy <- broom.mixed::tidy(poisson_pse)
+negb_hae_tidy <- broom.mixed::tidy(negb_hae)
+```
+
+```{r echo=FALSE}
+poission_trio_tidy %>% 
+  mutate(model = "trio") %>% 
+  select(model, everything())
+
+poission_three_tidy %>% 
+  mutate(model = "three") %>% 
+  select(model, everything())
+
+rbind(
+  poission_sta_tidy %>% mutate(model = "sta") %>% select(model, everything()),
+  poission_pse_tidy %>% mutate(model = "pse") %>% select(model, everything()),
+  poission_hae_tidy %>% mutate(model = "hae") %>% select(model, everything())) %>%
+  as.data.frame() %>%
+  print.data.frame()
+```
+
+```{r message=FALSE, warning=FALSE}
+stan_trio <-
+  stan_glmer.nb(
+    counting ~ 
+      -1 + age + scale(elast) +
+      age * species + scale(elast) * species +
+      (1 + age | sid) +
+      (1 + age | sid:species) +
+      offset(log(root)),
+    data = count_trio,
+    chains = 4,
+    iter = 5000,
+    warmup = 2500,
+    ## the priors for betas and bs
+    prior = normal(
+      location = 0,
+      scale = NULL,
+      autoscale = TRUE),
+    ## the prior probably for alpha?
+    ## but we did not include it
+    prior_intercept = normal(
+      location = 0,
+      scale = NULL,
+      autoscale = FALSE),
+    ## the prior for the aux
+    prior_aux = exponential(
+      rate = 1,
+      autoscale = TRUE),
+    ## decomposition of covariance function
+    ## Cholesky probably?
+    prior_covariance = decov(),
+    ## 	a logical scalar (defaulting to FALSE)
+    ## 	indicating whether to draw
+    ## 	from the prior predictive distribution
+    prior_PD = FALSE,
+    control = list(adapt_delta = 0.99))
+
+save(stan_trio, file = "new_data/stan_trio_20210209.Rdata")
+```
+
+```{r}
+stan_three <-
+  stan_glmer.nb(
+    counting ~
+      -1 + age + scale(elast) +
+      age * species + scale(elast) * species +
+      (1 + age | sid) +
+      offset(log(root)),
+    data = count_trio,
+    chains = 4,
+    iter = 5000,
+    warmup = 2500,
+    ## the priors for betas and bs
+    prior = normal(
+      location = 0,
+      scale = NULL,
+      autoscale = TRUE),
+    ## the prior probably for alpha?
+    ## but we did not include it
+    prior_intercept = normal(
+      location = 0,
+      scale = NULL,
+      autoscale = FALSE),
+    ## the prior for the aux
+    prior_aux = exponential(
+      rate = 1,
+      autoscale = TRUE),
+    ## decomposition of covariance function
+    ## Cholesky probably?
+    prior_covariance = decov(),
+    ## 	a logical scalar (defaulting to FALSE)
+    ## 	indicating whether to draw
+    ## 	from the prior predictive distribution
+    prior_PD = FALSE,
+    control = list(adapt_delta = 0.95))
+
+save(stan_three, file = "new_data/stan_three_20210209.Rdata")
+```
+
+```{r}
+stan_sta <-
+  stan_glmer.nb(
+    counting ~
+      1 + age + scale(elast) +
+      (1 + age | sid) +
+      offset(log(root)),
+    data = count_sta,
+    chains = 4,
+    iter = 2000,
+    warmup = 1000,
+    ## the priors for betas and bs
+    prior = normal(
+      location = 0,
+      scale = NULL,
+      autoscale = TRUE),
+    ## the prior probably for alpha?
+    ## but we did not include it
+    prior_intercept = normal(
+      location = 0,
+      scale = NULL,
+      autoscale = FALSE),
+    ## the prior for the aux
+    prior_aux = exponential(
+      rate = 1,
+      autoscale = TRUE),
+    ## decomposition of covariance function
+    ## Cholesky probably?
+    prior_covariance = decov(),
+    ## 	a logical scalar (defaulting to FALSE)
+    ## 	indicating whether to draw
+    ## 	from the prior predictive distribution
+    prior_PD = FALSE,
+    control = list(adapt_delta = 0.80))
+
+save(stan_sta, file = "new_data/stan_sta_20210209.Rdata")
+```
+
+```{r message=FALSE, warning=FALSE}
+stan_pse <-
+  stan_glmer.nb(
+    counting ~
+    1 + age +
+      scale(elast) +
+      (1 + age | sid) +
+      offset(log(root)),
+    data = count_pse,
+    chains = 4,
+    iter = 10000,
+    warmup = 5000,
+    ## the priors for betas and bs
+    prior = normal(
+      location = 0,
+      scale = NULL,
+      autoscale = TRUE),
+    ## the prior probably for alpha?
+    ## but we did not include it
+    prior_intercept = normal(
+      location = 0,
+      scale = NULL,
+      autoscale = FALSE),
+    ## the prior for the aux
+    prior_aux = exponential(
+      rate = 1,
+      autoscale = TRUE),
+    ## decomposition of covariance function
+    ## Cholesky probably?
+    prior_covariance = decov(),
+    ## 	a logical scalar (defaulting to FALSE)
+    ## 	indicating whether to draw
+    ## 	from the prior predictive distribution
+    prior_PD = FALSE,
+    control = list(adapt_delta = 0.99))
+
+save(stan_pse, file = "new_data/stan_pse_20210209.Rdata")
+```
+
+```{r message=FALSE, warning=FALSE}
+stan_hae <-
+  stan_glmer.nb(
+    counting ~ 
+      1 + age +
+      scale(elast) +
+      (1 + age | sid) +
+      offset(log(root)),
+    data = count_hae,
+    chains = 4,
+    iter = 10000,
+    warmup = 5000,
+    ## the priors for betas and bs
+    prior = normal(
+      location = 0,
+      scale = NULL,
+      autoscale = TRUE),
+    ## the prior probably for alpha?
+    ## but we did not include it
+    prior_intercept = normal(
+      location = 0,
+      scale = NULL,
+      autoscale = FALSE),
+    ## the prior for the aux
+    prior_aux = exponential(
+      rate = 1,
+      autoscale = TRUE),
+    ## decomposition of covariance function
+    ## Cholesky probably?
+    prior_covariance = decov(),
+    ## 	a logical scalar (defaulting to FALSE)
+    ## 	indicating whether to draw
+    ## 	from the prior predictive distribution
+    prior_PD = FALSE,
+    control = list(adapt_delta = 0.99))
+
+save(stan_hae, file = "new_data/stan_hae_20210209.Rdata")
+```

@@ -1,0 +1,80 @@
+---
+title: "05 Figure3A&B"
+author: "Randy"
+date: "9/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Beta Diversity OP, fig.height = 7, fig.width = 7}
+
+Plot_OP <- ggplot(DataSet_OP,
+                  aes(x = Dim1, y = Dim2,
+                      group = ID, color = EnzD)) +
+  geom_line(col = "grey") +
+  geom_point(size = 2, alpha = 0.5) +
+  guides(col = F, size = F) +
+  geom_segment(data = Species_OP_df,
+               aes(x = 0, xend = Dim1,
+                   y = 0, yend = Dim2), 
+               arrow = arrow(length = unit(0.2, "cm")), 
+               colour= "black", 
+               stat = "identity",
+               inherit.aes = FALSE) +
+  geom_text(data = Species_OP_df,
+            aes(x = Dim1, y = Dim2, 
+                label = Species),
+            inherit.aes = FALSE, 
+            size = 3) +
+  coord_fixed() +
+  xlim(-1,1) +
+  ylim(-1,1) +
+  theme_bw() +
+  ggthemes::scale_colour_wsj("colors6") +
+  ggtitle("Ordination Biplot", 
+          "Beta diveristy values for OP swabs") +
+  labs(y = "Component2", x = "Component1") +
+  theme(text = element_text(size = 15))
+
+Plot_OP
+```
+
+```{r Beta Diversity SP, fig.height = 7, fig.width = 7}
+
+Plot_SP <- ggplot(DataSet_SP,
+                  aes(x = Dim1,y = Dim2,
+                      group = ID, color = EnzD)) +
+  geom_line(col = "grey") +
+  geom_point(size = 2,
+             alpha = 0.5) +
+  guides(col = F, size = F) +
+  geom_segment(data = Species_SP_df,
+               aes(x = 0, xend = Dim1,
+                   y = 0, yend = Dim2), 
+               arrow = arrow(length = unit(0.2, "cm")), 
+               colour = "black", stat = "identity",
+               inherit.aes = FALSE) +
+  geom_text(data = Species_SP_df,
+            aes(x = Dim1, y = Dim2,
+                label = Species),
+            inherit.aes = FALSE, 
+            size = 3) +
+  coord_fixed() +
+  xlim(-1,1) +
+  ylim(-1,1) +
+  theme_bw() +
+  ggthemes::scale_colour_wsj("colors6") +
+  ggtitle("Ordination Biplot", 
+          "Beta diveristy values for Sputum") +
+  labs(y = "Component2", x = "Component1") +
+  theme(text = element_text(size = 15))
+
+Plot_SP
+```
+
+```{r Figure3, fig.height = 8, fig.width = 16}
+grid.arrange(Plot_OP, Plot_SP, ncol = 2, nrow = 1)
+```

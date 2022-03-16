@@ -1,0 +1,85 @@
+---
+title: "09 Taxa OP"
+author: "Randy"
+date: "9/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r Significant bacteria in OP}
+Sig_Genera <- 
+  c(names(Wilcoxon_OP1),
+    "Bacteria/Firmicutes/
+    Bacilli/Bacillales/
+    Staphylococcaceae/
+    Staphylococcus") %>%
+  as.character()
+
+Staphylococcus_OP <- 
+  DigestRel_OP %>%
+  filter(OTU_Name == "Bacteria/
+  Firmicutes/Bacilli/Bacillales/
+  Staphylococcaceae/Staphylococcus") %>%
+  column_to_rownames("OTU_Name") %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column("Collection") %>%
+  separate(Collection, 
+           into = c("Method", "ID"), 
+           sep = 1) %>% 
+  # set up the Method and ID
+  separate(ID, 
+           into = c("ID", "EnzD"), 
+           sep = 4) %>% 
+  # set up the digestion method
+  mutate(EnzD = replace(EnzD, EnzD != "D", "N"))
+  
+Staphylococcus_OP_D <- 
+  Staphylococcus_OP %>%
+  filter(EnzD == "D") %>%
+  select(Rate = 4) %>%
+  t()
+
+
+Staphylococcus_OP_N <- 
+  Staphylococcus_OP %>%
+  filter(EnzD == "N") %>%
+  select(Rate = 4) %>%
+  as.vector() %>%
+  t()
+
+Staphylococcus_OP_Wilcox <- 
+  wilcox.exact(Staphylococcus_OP_N, 
+               Staphylococcus_OP_D, 
+               paired=T)
+Staphylococcus_OP_Wilcox
+
+Table_OP_bps <- 
+  Table_OP %>%
+  select("p-value") %>%
+  rownames_to_column("Species") %>%
+  add_row("Species" = "Staphylococcus", 
+          "p-value" = "<0.01")
+
+SP_Vals <- DigestRel_SP %>%
+  filter(OTU_Name %in% Sig_Genera) %>%
+  column_to_rownames("OTU_Name") %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column("Collection") %>%
+  separate(Collection, 
+           into = c("Method", "ID"), 
+           sep = 1) %>% 
+  # set up the Method and ID
+  separate(ID, 
+           into = c("ID", "EnzD"), 
+           sep = 4) %>% 
+  # set up the digestion method
+  mutate(EnzD = replace(EnzD, EnzD != "D", "N"))
+```
+```
+

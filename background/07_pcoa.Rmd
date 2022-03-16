@@ -1,0 +1,350 @@
+---
+title: "07_pcoa"
+author: "Randy"
+date: "9/14/2020"
+output:
+  html_document:
+    df_print: paged
+  word_document:
+    reference_docx: template.docx
+---
+
+```{r setup, include=FALSE}
+##Clear existing data and graphics
+
+rm(list=ls())
+graphics.off()
+
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE)
+```
+
+```{r packages, message=FALSE, warning=FALSE, include=FALSE}
+library(tidyverse)
+library(here)
+library(readxl)
+
+library(ggplot2)
+library(ggthemes)
+
+library(vegan)
+
+library(viridisLite)
+library(RColorBrewer)
+```
+
+
+```{r dataset, include=FALSE}
+blank_tbl <- 
+  here::here("background",
+             "data",
+             "Blank TBL20200614.csv") %>%
+  read.csv()
+
+sample_tbl <- 
+  here::here("background",
+             "data",
+             "Sample TBL20200614.csv") %>%
+  read.csv() %>%
+  select(Name = 1, everything()) 
+  ## rearrange the order 
+  ## to put the sample names first
+
+position <- 
+  here::here("background",
+             "data",
+             "Background-20200604.xlsx") %>%
+  read_excel() %>%
+  select("Name", "Plates", "Real") %>% 
+  ## Name includes both Group type and ID
+  unique() %>% 
+  ## make sure there is no repeated
+  separate("Name", into = c("Group", "ID"), sep = 1) %>%
+  mutate(Group = Group, Category = Group) %>%
+  unite(Name, Category, ID, sep = "") 
+
+Background <- 
+  here::here("background",
+             "data",
+             "Background_merged_Workspace_1_OTU.txt") %>%  
+  read_table2() %>%
+  remove_rownames() %>%
+  column_to_rownames("OTU_Name") 
+  ## setup the OTU_names as the rownames
+
+MH_txt <- 
+  here::here("background",
+             "data",
+             "MH.txt") %>%  
+  read_table2()
+
+MAT_RA_lq <- 
+  here::here("background",
+             "data",
+             "Background_RA_loading.csv") %>%   
+  read.csv(check.names = F,
+           row.names = 1)
+
+MAT_RA <- 
+  here::here("background",
+             "data",
+             "Background_Merge_clean.csv") %>%   
+  read.csv(row.names = 1,
+           check.names = F)
+
+
+## the covariance matrix is symmetrical
+rownames(MH_txt) = colnames(MH_txt)
+```
+
+```{r function}
+## split the taxum names from OTU_names
+## return the last level
+## Thanks Kayla for the code
+## Example: 01 Dataset.Rmd
+## Line: 20
+name_split <- function(names){
+      names = names
+      save = strsplit(names, "/")
+      h = 0
+      for(i in 1:length(names)){
+        h[i] = length(save[[i]])}
+      i = 0
+      name.list = NULL
+      for(i in 1:length(save)){
+        name.list[i] = save[[i]][h[i]]}
+      return(name.list)
+      }
+```
+
+
+```{r "data", message=FALSE, warning=FALSE}
+## get the sequencing counting table for envfit()
+Merge_Count <- Background %>% 
+  ## similar to the RA table
+  ## remove unclassified and bacteria
+  rownames_to_column("OTU_Name") %>%
+  filter(OTU_Name != "Unclassified") %>%
+  filter(OTU_Name != "Bacteria") %>%
+  column_to_rownames("OTU_Name") %>%
+  select(contains(c("H2O", "T3", "NEG"))) %>%
+  t() %>% 
+  ## transpose the data.frame
+  as.data.frame() %>%
+  ## after the t() function
+  ##the data frame is in matrix form
+  select(-root) %>%
+  rownames_to_column("Name") %>%
+  inner_join(position, by="Name") %>% 
+  ## add the position 
+  left_join(sample_tbl, by="Name") %>% 
+  ## add the loading
+  mutate(lq_all = ifelse(
+    is.na(lq_all), 
+    mean(blank_tbl$lq_all), 
+    lq_all)) %>%
+  select(-"plate") %>%
+  select(Name, Group, Plates, 
+         Real, lq_all, everything()) %>%
+  unite(Name, Name, Group, 
+        Plates, Real, lq_all) %>%
+  column_to_rownames("Name")
+```
+
+
+
+```{r "morisita_horn"}
+## calculate the Morisita-Horn matrix by hand
+set.seed(555)
+Dist2 <- MH_txt %>% 
+  ## this the morisita horn matrix 
+  ##for the dissimilarity
+  filter(rownames(.) %in% 
+           rownames(MAT_RA)) %>% 
+  ## filter out samples in rows
+  t() %>% 
+  ## transpose the data.frame
+  as.data.frame() %>%
+  ## after the t() function
+  ##the data frame is in matrix form
+  filter(rownames(.) %in% rownames(MAT_RA)) %>% 
+  ## filter out the same samples in columns
+  rownames_to_column("Name") %>%
+  left_join(MAT_RA_lq, "Name") %>% 
+  ## add the position 
+  unite("Name", c("Name", "lq_all")) %>% 
+  ## add the loading
+  column_to_rownames("Name") %>%
+  t() %>% 
+  ## transpose the data.frame
+  as.data.frame()
+  ## after the t() function
+  ##the data frame is in matrix form
+
+Matrix1 <- matrix(1, ncol(Dist2), ncol(Dist2)) 
+## need to recalculate the distance matrix
+rownames(Matrix1) <- rownames(Dist2)
+colnames(Matrix1) <- colnames(Dist2)
+
+## the paired PCOA and MDS1 are for 
+## different methods to calculate 
+## the morisita horn matrix
+## MDS1 is using the matrix calcualted by hand
+## PCOA is the matrix calcualted by vegan package
+MDS1_matrix <- Matrix1 - Dist2 
+PCOA_matrix <- Merge_Count %>%
+  vegdist(method = "morisita") 
+
+## get the pcoa/mds by cmdscale(), 
+## the arguement eig and x.ret will 
+## provide the composition of the components
+MDS1_result <- MDS1_matrix %>% 
+  cmdscale(eig = T, x.ret = T)
+
+PCOA_result <- PCOA_matrix %>%  
+  cmdscale(eig = T, x.ret = T) 
+
+## the percentage of each compenents are reported
+MDS1_var_per <- round(MDS1_result$eig / sum(MDS1_result$eig) * 100, 2)
+PCOA_var_per <- round(PCOA_result$eig / sum(PCOA_result$eig) * 100, 2)
+
+## the results of PCOA, the contribution of each species for two dimensions
+PCOA <- PCOA_result$points[, 1:2] %>%
+  as.data.frame() %>% 
+  select(Dim1 = 1, Dim2 = 2) %>%
+  arrange(row.names(.))
+MDS1 <- MDS1_result$points[, 1:2] %>%  
+  as.data.frame() %>%  
+  select(Dim1 = 1, Dim2 = 2) %>%
+  arrange(row.names(.))
+
+Merge_Count <- Merge_Count %>% 
+  arrange(row.names(.))
+
+## fit the PCOA into the sequencing counting data as environment
+Species_pcoa <- envfit(PCOA, Merge_Count) 
+Species_mds <- envfit(MDS1, Merge_Count)
+```
+
+```{r "pcoa"}
+## the vectors of the pcoa plots
+Species_mds_df <- 
+  cbind(Species_mds$vectors$arrows * 
+          sqrt(Species_mds$vectors$r), 
+        Species_mds$vectors$pvals) %>%
+  as.data.frame() %>%
+  mutate(Species = name_split(rownames(.))) %>%
+  select(everything(), pvalue = 3) %>%
+  arrange(by = pvalue) %>%
+  head(25)
+
+Species_pcoa_df <- 
+  cbind(Species_pcoa$vectors$arrows * 
+          sqrt(Species_pcoa$vectors$r), 
+          Species_pcoa$vectors$pvals) %>%
+  as.data.frame() %>%
+  mutate(Species = name_split(rownames(.))) %>%
+  select(everything(), pvalue = 3) %>%
+  arrange(by = pvalue) %>%
+  head(25)
+
+## the dataset for the pcoa plots
+PCOA_data <- 
+  cbind(PCOA, Merge_Count) %>%
+  rownames_to_column("Information") %>%
+  separate("Information", 
+           into = c("ID", "Group", "Plate", 
+                  "Position", "Loading"), 
+           sep = "_")
+
+MDS1_data <- 
+  Merge_Count %>%
+  rownames_to_column("Information") %>%
+  separate("Information", 
+           into = c("ID", "Group", "Plate", 
+                  "Position", "Loading"), 
+           sep = "_") %>%
+  inner_join(rownames_to_column(MDS1, "ID"), "ID")
+
+# View(MDS1)
+# View(PCOA)
+# View(Merge_Count)
+# View(MDS1_data)
+# View(PCOA_data)
+# View(Species_mds_df)
+# View(Species_pcoa_df)
+```
+
+```{r "plots", fig.height=6, fig.width=6, message=FALSE, warning=FALSE}
+Plot_F <- 
+  ggplot(PCOA_data, 
+         aes(x = Dim1, 
+             y = Dim2, 
+             label = ID,
+             group = Group, 
+             color = Group)) +
+  geom_point(size = 3) +
+  geom_segment(data = Species_pcoa_df,
+               aes(x = 0, 
+                   xend = Dim1, 
+                   y = 0,
+                   yend = Dim2), 
+               arrow = arrow(length = unit(0.2, "cm")), 
+               colour = "black", 
+               stat = "identity",
+               inherit.aes = FALSE) +
+  geom_text(data = Species_pcoa_df,
+            aes(x = Dim1, 
+                y = Dim2, 
+                label = Species),
+            inherit.aes = FALSE, 
+            size = 3) +
+  # xlim(-0.5, +1) +
+  # ylim(-0.1, +0.1) +
+  viridis::scale_color_viridis(option = "D")+
+  theme_classic() +
+  xlab(paste("MDS1 ", PCOA_var_per[1], "%", sep = "")) +
+  ylab(paste("MDS2 ", PCOA_var_per[2], "%", sep = "")) +
+  ggthemes::scale_colour_tableau("Jewel Bright") +
+  ggtitle("PCOA Ordination Biplot") +
+  theme(text = element_text(size = 15)) +
+  theme(legend.position = "right")
+
+Plot_H <- 
+  ggplot(MDS1_data, 
+         aes(x = Dim1, 
+             y = Dim2, 
+             label = ID, 
+             group = Group,
+             color = Group)) +
+  geom_point(size = 3) +
+  geom_segment(data = Species_mds_df,
+               aes(x = 0, 
+                   xend = Dim1,
+                   y = 0,
+                   yend = Dim2), 
+               arrow = arrow(length = unit(0.2, "cm")), 
+               colour = "black", 
+               stat = "identity",
+               inherit.aes = FALSE) +
+  geom_text(data = Species_mds_df,
+            aes(x = Dim1,
+                y = Dim2,
+                label = Species),
+            inherit.aes = FALSE, 
+            size = 3) +
+  theme_classic() +
+  xlab(paste("MDS1 ", MDS1_var_per[1], "%", sep = "")) +
+  ylab(paste("MDS2 ", MDS1_var_per[2], "%", sep = "")) +
+  ggthemes::scale_colour_tableau("Jewel Bright") +
+  ggtitle("PCOA Ordination Biplot") +
+  theme(text = element_text(size = 15)) +
+  theme(legend.position = "right")
+
+Plot_F
+Plot_H
+Plot_H + geom_text()
+```
+

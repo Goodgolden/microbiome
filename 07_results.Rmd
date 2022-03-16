@@ -1,0 +1,218 @@
+---
+title: "05_result_cross"
+author: "Randy"
+date: "12/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+load("stan_fev_time1_20201205.Rdata")
+launch_shinystan(stan_fev_time1)
+
+load("stan_fev0_20201208.Rdata")
+launch_shinystan(stan_fev0)
+```
+
+
+## Negative Binomial without covariance
+the data is in long form
+counting ~ -1  + age + genotype + gender + Species + 
+           (1|SID) + (1|Species) + offset(log(root))),
+      data = count_gather,
+      family = negbinomial("log")
+```{r}
+result_nb0 <-
+  brms::posterior_summary(stan_nb0, 
+                          pars = c("^b_", "^sd_", "sigma"), 
+                          probs = c(0.025, 0.975)) %>%
+  as.data.frame() %>%
+  rownames_to_column("Variable") %>%
+  select(-`Q2.5`, -`Q97.5`) %>%
+  mutate(wald = abs(Estimate/Est.Error),
+         pval = 2 * pnorm(wald, lower.tail = F)) %>%
+  column_to_rownames("Variable") %>%
+  round(4)
+
+loo_nb0 <- loo::loo(stan_nb0, 
+                    save_psis = TRUE)
+
+
+result_nb0
+loo_nb0
+waic(stan_nb0)
+```
+
+```{r fig.height=10, fig.width=6}
+bayesplot::color_scheme_set("viridisD")
+plot_fev_time1 <- plot(stan_nb0, 
+                       combo = c("dens_overlay", "trace"),
+                       theme = ggplot2::theme_bw(base_size = 16) +
+                         ggplot2::theme(legend.position = "none"))
+```
+
+
+```{r}
+plot(loo_nb0, label_points = TRUE)
+pp_check(stan_nb0, nsamples = 1000, type = "stat_2d") + 
+  theme_bw(base_size = 20)
+
+# yrep <- brms::posterior_predict(stan_nb0)
+# ppc_loo_pit_overlay(count_gather$counting, 
+#                     yrep, 
+#                     lw = weights(loo_nb0$psis_object), 
+#                     compare = "uniform")
+
+pp_check(stan_nb0, nsamples = 100) %>% 
+  .$data %>% 
+  mutate(value = value + 0.01) %>%
+  ggplot(data = ., aes(x = value,  group = rep_id)) +
+  geom_line(stat = "density",
+            aes(color = if_else(is_y_label == "italic(y)",
+                                "Real Data", "Sampled PP")),
+            alpha = 0.4) +
+  scale_x_log10(name = "not sure what will be x", expand = c(0, 0)) +
+  scale_y_continuous(name = "Density", expand = c(0, 0)) +
+  scale_color_manual(name = "", values = c("red", "grey")) + 
+  theme_classic() +
+  ggtitle("counting")
+```
+
+
+
+
+## fevslope model no species
+fevslope ~ -1 + age + genotype + gender + elast,
+      data = fev_ra_time1,
+      family = gaussian()
+```{r}
+result_fev0 <-
+  brms::posterior_summary(stan_fev0, 
+                          pars = c("^b_", "^sd_", "sigma"), 
+                          probs = c(0.025, 0.975)) %>%
+  as.data.frame() %>%
+  rownames_to_column("Variable") %>%
+  select(-`Q2.5`, -`Q97.5`) %>%
+  mutate(wald = abs(Estimate/Est.Error),
+         pval = 2 * pnorm(wald, lower.tail = F)) %>%
+  column_to_rownames("Variable") %>%
+  round(4)
+
+loo_fev0 <- loo::loo(stan_fev0, save_psis = TRUE)
+
+waic(stan_fev0)
+loo_fev0
+result_fev0
+```
+
+
+```{r fig.height=10, fig.width=6}
+bayesplot::color_scheme_set("viridisD")
+plot(stan_fev0, 
+     combo = c("dens_overlay", "trace"),
+     theme = ggplot2::theme_bw(base_size = 16) +
+       ggplot2::theme(legend.position = "none"))
+```
+
+
+```{r}
+plot(loo_fev0, label_points = TRUE)
+pp_check(stan_fev0, nsamples = 1000, type = "stat_2d") + 
+  theme_bw(base_size = 20)
+
+yrep <- brms::posterior_predict(stan_fev0)
+ppc_loo_pit_overlay(fev_ra_time1$fevslope, 
+                    yrep, 
+                    lw = weights(loo_fev0$psis_object), 
+                    compare = "uniform")
+
+pp_check(stan_fev0, nsamples = 100) %>% 
+  .$data %>% 
+  mutate(value = value + 0.01) %>%
+  ggplot(data = ., aes(x = value,  group = rep_id)) +
+  geom_line(stat = "density",
+            aes(color = if_else(is_y_label == "italic(y)",
+                                "Real Data", "Sampled PP")),
+            alpha = 0.4) +
+  scale_x_continuous(name = "not sure what will be x", expand = c(0, 0)) +
+  scale_y_continuous(name = "Density", expand = c(0, 0)) +
+  scale_color_manual(name = "", values = c("red", "grey")) + 
+  theme_classic() +
+  ggtitle("fevslope first time point")
+```
+
+
+
+## fevslope with species
+fevslope ~ age + genotype + gender + il1 +
+         Prevotella + Gemella + Staphylococcus + 
+         Streptococcus + Veillonella + Leptotrichia + Inquilinus +
+         Achromobacter + Neisseria + Lysobacter + 
+         Haemophilus + Pseudomonasplus + Stenotrophomonas,
+      data = fev_ra_time1,
+      family = gaussian()
+```{r}
+result_fev_time1 <-
+  brms::posterior_summary(stan_fev_time1, 
+                          pars = c("^b_", "^sd_", "sigma"), 
+                          probs = c(0.025, 0.975)) %>%
+  as.data.frame() %>%
+  rownames_to_column("Variable") %>%
+  select(-`Q2.5`, -`Q97.5`) %>%
+  mutate(wald = abs(Estimate/Est.Error),
+         pval = 2 * pnorm(wald, lower.tail = F)) %>%
+  column_to_rownames("Variable") %>%
+  round(4)
+loo_fev_time1 <- loo::loo(stan_fev_time1, save_psis = TRUE)
+
+loo_fev_time1
+result_fev_time1
+waic(stan_fev_time1)
+```
+
+
+
+```{r fig.height=10, fig.width=6}
+bayesplot::color_scheme_set("viridisB")
+plot_fev_time1 <- plot(stan_fev_time1, 
+                       combo = c("dens_overlay", "trace"),
+                       theme = ggplot2::theme_bw(base_size = 16) +
+                         ggplot2::theme(legend.position = "none"))
+```
+
+
+```{r}
+plot(loo_fev_time1, label_points = TRUE)
+pp_check(stan_fev_time1, nsamples = 1000, type = "stat_2d") + 
+  theme_bw(base_size = 20)
+
+yrep <- brms::posterior_predict(stan_fev_time1)
+ppc_loo_pit_overlay(fev_ra_time1$fevslope, 
+                    yrep, 
+                    lw = weights(loo_fev_time1$psis_object), 
+                    compare = "uniform")
+
+pp_check(stan_fev_time1, nsamples = 500) %>% 
+  .$data %>% 
+  mutate(value = value + 0.01) %>%
+  ggplot(data = ., aes(x = value,  group = rep_id)) +
+  geom_line(stat = "density",
+            aes(color = if_else(is_y_label == "italic(y)",
+                                "Real Data", "Sampled PP")),
+            alpha = 0.4) +
+  scale_x_continuous(name = "not sure what will be x", expand = c(0, 0)) +
+  scale_y_continuous(name = "Density", expand = c(0, 0)) +
+  scale_color_manual(name = "", values = c("red", "grey")) + 
+  theme_classic() +
+  ggtitle("fevslope first time point")
+```
+
+
+
+
+
+

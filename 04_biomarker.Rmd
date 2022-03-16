@@ -1,0 +1,236 @@
+---
+title: "04_biomarkers"
+author: "Randy"
+date: "10/1/2020"
+output:
+  html_document:
+    df_print: paged
+  word_document:
+    reference_docx: template.docx
+---
+
+```{r "setup", include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE,
+	cache = TRUE)
+
+```
+
+```{r "import the packages", include=FALSE}
+library(tidyverse)
+library(here)
+
+# library(tidyMicro)
+# lsf.str("package:tidyMicro")
+# ls("package:tidyMicro")
+```
+
+
+```{r "functions"}
+## a function to select each ID
+select_ID <-
+  function(ID, dataset) {
+    dataset %>%
+      ## just a simple function
+      ## to filter out the ID
+      ## easier to use in the map()
+      filter(SYSID == ID)
+  }
+
+
+## a function to plot the biomarker
+## and save the pdf file automatically
+## with ggsave()
+Bioplot <- 
+  function(biomarker) {
+    ggplot(data = merge_eligible, 
+           aes(x = VISITNUM,  
+               group = SYSID, 
+               color = SYSID)) +
+
+    geom_smooth(aes_string(y = biomarker), size = 1) +
+    ## better to include both 
+    ## geom_smooth and geom_line
+    geom_line(aes_string(y = biomarker), size = 1) +
+    geom_point(aes_string(y = biomarker)) +
+    ## geom_point should be on the top
+    theme_bw() +
+    scale_y_log10() +
+    facet_wrap("SYSID") +
+    ## to remove the grey background 
+    ## in the legend area
+    guides(color = guide_legend(override.aes=list(fill=NA)))
+  
+    # ggsave(paste0("Data/724_", biomarker, ".pdf"))
+    ## the function will return
+    ## the last object and 
+    ## save in the folder
+    ## ggsave does not return
+}
+```
+
+
+```{r "import the dataset"}
+merge_eligible <-
+  here::here(
+    "seven_twenty_four",
+    "new_data",
+    "724_merge_eligible.csv") %>%
+  read.csv(row.names = 1,
+           ## sorry just save the first column
+           ## ## as the rownames next time.
+           check.names = F,
+           ## read.csv() will change the
+           ## \/%#^ into . automatically
+           ## set chack.names = F
+           header = TRUE) %>%
+  mutate(SYSID = as.factor(SYSID),
+         VISITNUM = as.factor(VISITNUM))
+
+
+
+## biomarkers have NOT been
+## included into the dashboard
+biomarker <- 
+  c(
+    ## FEF
+    "fef_wanghankpct", "PostFEF_Best", "PostFEF_Pred",
+    ## FEV
+    "FEV1FVC", "FEV_BEST", "fev_fvc",
+    "FEV_KUL", "FEV_Pred", "fev_wanghankpct",
+    "PostFEV1FVC", "PostFEV_Best", "PostFEV_Pred",
+    ## FVC
+    "FVC_Best", "fvc_wanghankpct", 
+    "PostFVC_Best", "PostFVC_Pred",
+    ## FRC
+    "FRC_Best", "FRC_Pred",
+    ## qPCR is done
+    ## "lq_all", "lq_fus", "lq_hin", "lq_pae", "lq_pde",
+    ## "lq_pme", "lq_pmi", "lq_por", "lq_sau"
+    ## Immflammation
+    "MMP2FINALCONC", "MMP9FINALCONC", 
+    "TNF_aFINALCONC", "TIMPFINALCONC",
+    "TLC_Best", "TLC_Pred",
+    ## ILs: "IL_17FINALCONC",
+    "IL_1_FINALCONC", "IL_6FINALCONC", "IL_8FINALCONC",
+    "SLPIFINALCONC", "PMNEFINALCONC", 
+    "UTPFINALCONC", "ELASFINALCONC",
+    ## Cells
+    # "Monocyte__Macrophage", "mucous", "neut_count", "Neutrophils", "Squamous_Epithelial"
+    ## Lung
+    "PulmExacerb", "PulseOx",
+    ## not sure what are those
+    "total_score", "WAZ", "RV_Best", "RV_Pred", "RVTLC")
+
+```
+
+
+```{r "biomarker plots", fig.height=10, fig.width=10, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+## plot all the biomarkers
+## not included in the dashboard
+map(biomarker, Bioplot)
+
+```
+
+```{r "qpcr plots", fig.height=4, fig.width=6, message=FALSE, warning=FALSE}
+map(unique(merge_eligible$SYSID), select_ID, merge_eligible) %>%
+  ## select_ID() requires two arguments
+  ## "unique(merge_eligible$SYSID)" contains first arguments
+  ## "merge_eligible" is the second argument 
+  ## the results of this step will be 
+  ## 26 fitlered ID datasets
+  ## see the "functions" chuck for details
+  map( ~ ggplot(data = ., aes(x = VISITNUM, group = SYSID)) +
+         ## the 26 datasets will be given to this 
+         ## ggplot() function and plot 26 times
+         ## with each individual dataset
+         geom_line(aes(y = `lq_fus`, color = "lq_fus"),  size = 1) +
+         geom_line(aes(y = `lq_hin`, color = "lq_hin"), size = 1) +
+         geom_line(aes(y = `lq_pae`, color = "lq_pae"), size = 1) +
+         geom_line(aes(y = `lq_pde`, color = "lq_pde"), size = 1) +
+         geom_line(aes(y = `lq_pme`, color = "lq_pme"), size = 1) +
+         geom_line(aes(y = `lq_pmi`, color = "lq_pmi"), size = 1) +
+         geom_line(aes(y = `lq_por`, color = "lq_por"), size = 1) +
+         geom_line(aes(y = `lq_sau`, color = "lq_sau"), size = 1) +
+         geom_line(aes(y = `lq_all`, color = "lq_all"), size = 1) +
+         ## geom_line() does not work well
+         ## if there is NA
+         geom_smooth(aes(y = `lq_fus`, color = "lq_fus"), size = 1, method = 'loess') +
+         geom_smooth(aes(y = `lq_hin`, color = "lq_hin"), size = 1, method = 'loess') +
+         geom_smooth(aes(y = `lq_pae`, color = "lq_pae"), size = 1, method = 'loess') +
+         geom_smooth(aes(y = `lq_pde`, color = "lq_pde"), size = 1, method = 'loess') +
+         geom_smooth(aes(y = `lq_pme`, color = "lq_pme"), size = 1, method = 'loess') +
+         geom_smooth(aes(y = `lq_pmi`, color = "lq_pmi"), size = 1, method = 'loess') +
+         geom_smooth(aes(y = `lq_por`, color = "lq_por"), size = 1, method = 'loess') +
+         geom_smooth(aes(y = `lq_sau`, color = "lq_sau"), size = 1, method = 'loess') +
+         geom_smooth(aes(y = `lq_all`, color = "lq_all"), size = 1, method = 'loess') +
+         ## not necessary to include both 
+         ## geom_smooth() and geom_line()
+         geom_point(aes(y = `lq_fus`, color = "lq_fus"),  size = 2) +
+         geom_point(aes(y = `lq_hin`, color = "lq_hin"), size = 2) +
+         geom_point(aes(y = `lq_pae`, color = "lq_pae"), size = 2) +
+         geom_point(aes(y = `lq_pde`, color = "lq_pde"), size = 2) +
+         geom_point(aes(y = `lq_pme`, color = "lq_pme"), size = 2) +
+         geom_point(aes(y = `lq_pmi`, color = "lq_pmi"), size = 2) +
+         geom_point(aes(y = `lq_por`, color = "lq_por"), size = 2) +
+         geom_point(aes(y = `lq_sau`, color = "lq_sau"), size = 2) +
+         geom_point(aes(y = `lq_all`, color = "lq_all"), size = 2) +
+          theme_bw() +
+          ylim(0, 6) +
+          labs(y = "qPCR") +
+          labs(x = "Visit Times") +
+          labs(title = .$SYSID) +
+          ## add a label for each ID
+          scale_color_discrete(name = "") +
+          ## remove the legend name
+          guides(color = guide_legend(override.aes=list(fill=NA))) +
+          ## remove the grey background
+          ggthemes::scale_colour_tableau("Jewel Bright") +
+          theme(legend.key = element_blank(),
+                legend.background = element_blank(),
+                legend.position = "bottom")
+          ## setup the legend formate
+          )
+
+```
+
+```{r "cell plots", fig.height=4, fig.width=6, message=FALSE, warning=FALSE}
+map(unique(merge_eligible$SYSID), select_ID, merge_eligible) %>%
+  ## select_ID() requires two arguments
+  ## "unique(merge_eligible$SYSID)" contains first arguments
+  ## "merge_eligible" is the second argument 
+  ## the results of this step will be 
+  ## 26 fitlered ID datasets
+  ## see the "functions" chuck for details
+  map( ~ ggplot(data = ., aes(x = VISITNUM, group = SYSID)) +
+         geom_smooth(aes(y = `Monocyte__Macrophage`, color = "Monocyte Macrophage"),  size = 1) +
+         geom_smooth(aes(y = `Neutrophils`, color = "Neutrophils"), size = 1) +
+         geom_smooth(aes(y = `Squamous_Epithelial`, color = "Squamous Epithelial"), size = 1) +
+         geom_line(aes(y = `Monocyte__Macrophage`, color = "Monocyte Macrophage"),  size = 1) +
+         geom_line(aes(y = `Neutrophils`, color = "Neutrophils"), size = 1) +
+         geom_line(aes(y = `Squamous_Epithelial`, color = "Squamous Epithelial"), size = 1) +
+         geom_point(aes(y = `Monocyte__Macrophage`, color = "Monocyte Macrophage"), size = 2) +
+         geom_point(aes(y = `Neutrophils`, color = "Neutrophils"), size = 2) +
+         geom_point(aes(y = `Squamous_Epithelial`, color = "Squamous Epithelial"), size = 2) +
+         theme_bw() +
+          ylim(0, 1) +
+          labs(y = "Percentage") +
+          labs(x = "Visit Times") +
+          labs(title = .$SYSID) +
+          ## add a label for each ID
+          scale_color_discrete(name = "") +
+          ## remove the legend names
+          guides(color = guide_legend(override.aes=list(fill=NA))) +
+          ## remove the grey legend background 
+          ggthemes::scale_colour_tableau("Jewel Bright") +
+          theme(legend.key = element_blank(),
+                legend.background = element_blank(),
+                legend.position = "bottom")
+          ## setup the legend form
+          )
+
+```
+

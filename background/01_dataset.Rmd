@@ -1,0 +1,255 @@
+---
+title: "01_dataset"
+author: "Randy"
+date: "9/14/2020"
+output: 
+  word_document:
+    reference_docx: template.docx
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+library(stringr)
+library(readxl)
+library(here)
+library(tidyverse)
+```
+
+
+```{r function}
+## split the taxum names from OTU_names
+## return the last level
+## Thanks Kayla for the code
+## Example: 01 Dataset.Rmd
+## Line: 20
+name_split <- 
+  function(names){
+      names = names
+      save = strsplit(names, "/")
+      h = 0
+      for(i in 1:length(names)){
+        h[i] = length(save[[i]])}
+      i = 0
+      name.list = NULL
+      for(i in 1:length(save)){
+        name.list[i] = save[[i]][h[i]]}
+      return(name.list)
+      }
+```
+
+
+```{r Import Dataset, message=FALSE, warning=FALSE}
+## Read the sample and blank tables
+## set directory will goes back to original
+## after the code finished
+
+blank_tbl <- 
+  here::here("background",
+             "data",
+             "Blank TBL20200614.csv") %>%
+  read.csv()
+
+sample_tbl <- 
+  here::here("background",
+             "data",
+             "Sample TBL20200614.csv") %>%
+  read.csv() %>%
+  select(Name = 1, everything()) 
+  ## rearrange the order 
+  ## to put the sample names first
+
+position <- 
+  here::here("background",
+             "data",
+             "Background-20200604.xlsx") %>%  
+  read_excel() %>%
+  select("Name", "Plates", "Real") %>% 
+  ## Name includes both Group type and ID
+  unique() %>% 
+  ## make sure there is no repeated
+  separate("Name", into = c("Group", "ID"), sep = 1) %>%
+  mutate(Group = Group, Category = Group) %>%
+  unite(Name, Category, ID, sep = "") 
+
+## to check the mean and standard deviation
+# tbl_mean <- mean(blank_tbl$lq_all); tbl_mean
+# tbl_sd <- sd(blank_tbl$lq_all); tbl_sd
+
+## read and clean the counting table
+Background <- 
+  here::here("background",
+             "data",
+             "Background_merged_Workspace_1_OTU.txt") %>%
+  read_table2() %>%
+  remove_rownames() %>%
+  column_to_rownames("OTU_Name") 
+  ## setup the OTU_names as the rownames
+```
+
+```{r Relative Aundance Table, echo=FALSE, message=FALSE, warning=FALSE}
+## remove the unclassified and bacteria
+## recalculate the root values
+Background["root",] <- 
+  Background["root",] - 
+  Background["Unclassified",] - 
+  Background["Bacteria", ]
+
+Background_RA <- Background %>%
+  rownames_to_column("OTU_Name") %>%
+  filter(OTU_Name != "Unclassified") %>%
+  ## remove "Unclassified"
+  filter(OTU_Name != "Bacteria") %>%
+  ## remove "Bacteria"
+  column_to_rownames("OTU_Name") %>%
+  select(contains(c("H2O", "T3", "NEG"))) %>%
+  ## select out the sample names
+  t() %>% 
+  ## transpose the data.frame
+  as.data.frame() %>% 
+  ## after the t() function
+  ##the data frame is in matrix form
+  rownames_to_column("Sample") %>%
+  mutate_at(vars(-Sample, -root), funs(./root)) %>%
+  ## only change the counting numbers
+  column_to_rownames("Sample") %>%
+  select(-root) %>%
+  t() %>% 
+  ## transpose the data.frame
+  as.data.frame() %>% 
+  ## after the t() function
+  ##the data frame is in matrix form
+  rownames_to_column("OTU_Name") %>%
+  separate("OTU_Name", 
+           into = c("D", "P", "C", "O", "F", "G", "S"), 
+           sep = "/") %>%
+  ## Kingdom, Phylum, Class, Order
+  ## Family, Genus, Species
+  ## Some of the levels will be empty
+  ## warnings will show
+  unite("OTU_Name", c("P", "C", "O", "F", "G", "S"), 
+        sep = "/") %>%
+  mutate(OTU_Name = str_replace_all(OTU_Name, '/NA', '')) %>%
+  ## change the OTU_Name in good format
+  column_to_rownames("OTU_Name") %>%
+  select(-D) %>%
+  ## The bacteria domain level 
+  ## not very useful for the tree
+  t() %>% 
+  ## transpose the data.frame
+  as.data.frame()
+  ## after the t() function
+  ##the data frame is in matrix form
+```
+
+
+```{r Merge with Loading, echo = FALSE}
+## merge the tables 
+## prepare for the pheatmap() matrix
+
+Merge_RA <- Background_RA %>%
+  rownames_to_column("Name") %>%
+  inner_join(position, by="Name") %>% 
+  ## select the samples in sequencing samples
+  left_join(sample_tbl, by="Name") %>% 
+  ## joint with the loading data
+  mutate(lq_all = ifelse(is.na(lq_all), 
+          mean(blank_tbl$lq_all), lq_all)) %>% 
+  ## loading volumns for colcumn as constant
+  select(-"plate") %>% 
+  ## remove extra plate information
+  select(Name, Group, Plates, 
+         Real, lq_all, everything()) %>% 
+  ## rearrange the columns order
+  unite(Name, Name, Group,
+        Plates, Real, lq_all) %>% 
+  ## combine all the information into rownames
+  column_to_rownames("Name") 
+  ## for the heatmap function
+
+max_species <- Merge_RA %>% 
+  map(max) 
+  ## find the largest RA value 
+  ## for each sample in each sample
+```
+
+```{r Merge with Position, echo = FALSE}
+## Merge the tables
+MAT_RA <- Merge_RA %>%
+  t() %>% 
+  ## transpose the data.frame
+  as.data.frame() %>% 
+  ## after the t() function
+  ##the data frame is in matrix form
+  rownames_to_column("OTU_Names") %>%
+  mutate(max = max_species) %>% 
+  ## add the information about the 
+  filter(max > 0.1) %>% 
+  ## an exploratory step to set up the cutoff score
+  select(-max) %>% 
+  ## no use of this after the filter()
+  mutate(Last = name_split(OTU_Names)) %>% 
+  ## only keep the lowest level
+  ## to see the details:
+  ## Rmd: 00 Functions
+  ## Line: 20
+  separate(OTU_Names, into="Phylum")  %>% 
+  ## only keep the phylum level
+  unite("OTU_Names", Phylum, Last, sep="/.../") %>% 
+  ## save the names as "phylum/.../last" type
+  ## disgard several levels
+  ## warnings showed up
+  column_to_rownames("OTU_Names") %>%
+  t() %>% 
+  ## transpose the data.frame
+  as.data.frame() %>% 
+  ## after the t() function
+  ## the data frame is in matrix form
+  rownames_to_column("Name") %>%
+  separate(Name, c("Name", "Group", "Plates", 
+             "Real", "lq_all"), "_") %>% 
+  ## return all the information back
+  mutate(Group = factor(Group, levels = c("H", "N", "T")),
+         Real = factor(Real, levels = c("1", "2", 
+                "3", "4", "5", "6", "7", "8", "9", 
+                "10", "11", "12"))) %>% 
+  ## change the factor levels
+  column_to_rownames("Name")
+```
+
+```{r Selected Control, echo = FALSE}
+Merge_RA_control <- Background_RA %>% 
+  rownames_to_column("Name") %>% 
+  inner_join(position, by="Name") %>% 
+  ## joint with position and loading
+  left_join(sample_tbl, by="Name") %>%
+  mutate(lq_all = ifelse(is.na(lq_all), 
+        mean(blank_tbl$lq_all), lq_all)) %>% 
+  ## control with constant loading
+  select(-"plate") %>%
+  select(Name, Group, Plates, 
+         Real, lq_all, everything()) %>%
+  filter(Group != "T") %>% 
+  ## only controls are included
+  unite(Name, Name, Group, Plates, Real, lq_all) %>% 
+  ## these information are useful for next step
+  column_to_rownames("Name")
+# View(Merge_RA_control)
+```
+
+```{r}
+## to check each tibble, select the View() function 
+## Ctrl + Shift + C to revert functional codes
+# View(Background)
+# View(Background_RA)
+# View(Merge_RA)
+# View(MAT_RA)
+
+## Save the dataset
+write.csv(Background_RA, "data/Background_Relative_Abundance.csv")
+write.csv(Merge_RA, "data/Background_Merge.csv")
+write.csv(MAT_RA, "data/Background_Merge_clean.csv")
+write.csv(Merge_RA_control, "data/Background_Merge_control_clean.csv")
+```

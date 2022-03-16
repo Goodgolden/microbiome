@@ -1,0 +1,86 @@
+---
+title: "02_table1"
+author: "Randy"
+date: "2/10/2021"
+
+output: html_document
+---
+
+```{r "setup", include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+rm(list=ls())
+graphics.off()
+```
+
+```{r "import packages", include=FALSE}
+library(tidyverse)
+library(gtsummary)
+library(flextable)
+library(here)
+```
+
+
+```{r "table1"}
+merge_eligible <- 
+  here::here("seven_twenty_four",
+             "new_data", 
+             "724_merge_eligiable.csv") %>%
+  read.csv()
+
+table1 <- merge_eligible %>%
+  ## \u0394F508 is for Greek letter "Delta"
+  ## add a new variable called "Genotype
+  ## to show the alleles
+  mutate(Genotype = case_when(
+    (Genotypes1 == "F508" & Genotypes2 == "F508") ~
+                            "\u0394F508/\u0394F508",
+    (Genotypes1 == "F508" & Genotypes2 != "F508") ~
+                            "\u0394F508/Other",
+    (Genotypes1 != "F508" & Genotypes2 != "F508") ~
+                            "Other/Other")) %>%
+  filter(VISITNUM == 1) %>%
+  ## only use the first time for table1
+  mutate(
+    ste = ifelse((is.na(ste) & Bacteria == "Negative"), 0, ste),
+    sta = ifelse(is.na(sta) & Bacteria == "Negative", 0, sta),
+    psa = ifelse(is.na(psa) & Bacteria == "Negative", 0, psa)) %>%
+  ## if the "Bacteria" is "Negative"
+  ## then all three taxa should be 0 counts
+  mutate(Fungus = ifelse(Fungus == "Negative", 0, 1)) %>%
+  # mutate(ste = ifelse(ste == 0, "Negative", "Positive"),
+  #        sta = ifelse(sta == 0, "Negative", "Positive"),
+  #        psa = ifelse(psa == 0, "Negative", "Positive")) %>%
+  select(Gender,
+         Age = AGE_YRS, 
+         Genotype,
+         `FVC% predicted` = FVC_Pred,
+         `FEV% predicted` = fev_wanghankpct,
+         Height = HEIGHT,
+         Weight = Weight,
+         BMI,
+         `Staphylococcus aureus` = sta,
+         `Pseudomonas aeruginosa` = psa,
+         `Stenotrophomonas maltophilia` = ste,
+         `Aspergillus fumigatus` = Fungus) %>%
+  ## select all the variables for table1
+  tbl_summary(by = NULL) %>%
+  ## just display all the variables in one column
+  modify_header(label = "**Variable**") %>%
+  # update the column header
+  bold_labels() %>%
+  italicize_labels() %>%
+  as_flex_table() %>%
+  flextable::bold(part = "header") %>% 
+  ## auto adjust the column widths 
+  flextable::autofit()
+
+table1
+
+## save pptx -----------------------------------------------
+## flextable can be saved directly to powerpoints
+flextable::save_as_pptx(
+  table1, 
+  path = "seven_twenty_four/01_table1.pptx")
+```
+
+

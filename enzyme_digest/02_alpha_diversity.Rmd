@@ -1,0 +1,47 @@
+---
+title: "02 Alpha Diversity"
+author: "Randy"
+date: "9/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(tidyverse)
+```
+
+```{r Alpha Diversity, message=FALSE, warning=FALSE}
+DigestAlpha <- Digest_alpha %>% 
+  arrange(Collection) %>% 
+  # arrange the order alphabetically
+  separate(Collection, into = c("Method","ID"), sep = 1) %>% 
+  # set up the Method and ID
+  separate(ID, into = c("ID","EnzD"), sep = 4) %>% 
+  # set up the digestion method
+  mutate(EnzD = replace(EnzD, EnzD != "D", "N")) %>% 
+  # add variable for digestion
+  mutate(Peilous = `ShannonH Median` / log(`Sobs Median`)) %>% 
+  # add variable for Peilous
+  select(ID, Method, EnzD, `Sobs Median`, 
+        `ShannonH Median`, Peilous, everything()) 
+  # just reorder the columns, 
+  # otherwise the new variables will be add to the last
+
+OPAlpha <- DigestAlpha %>% 
+  # filter out all the OP
+  filter(Method == "C")
+
+SPAlpha <- DigestAlpha %>% 
+  # filter out all the SP
+  filter(Method == "E") 
+
+wilcox.test(`Sobs Median` ~ EnzD, OPAlpha)
+wilcox.test(`Sobs Median` ~ EnzD, SPAlpha)
+
+wilcox.test(`ShannonH Median` ~ EnzD, OPAlpha)
+wilcox.test(`ShannonH Median` ~ EnzD, SPAlpha)
+
+wilcox.test(Peilous ~ EnzD, OPAlpha)
+wilcox.test(Peilous ~ EnzD, SPAlpha)
+```

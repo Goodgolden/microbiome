@@ -1,0 +1,195 @@
+---
+title: "04_morisita_horn"
+author: "Randy"
+date: "9/14/2020"
+output: 
+---
+
+```{r setup, include=FALSE}
+## just save the data, knitr
+
+rm(list=ls())
+graphics.off()
+
+library(tidyverse)
+library(here)
+
+library(ggplot2)
+library(vegan)
+library(exactRankTests)
+library(Matrix)
+
+library(gridExtra)
+library(grid)
+
+library(stringr)
+
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r function}
+## decide the outlier out of 4*IQR
+is_outlier <- function(x) {
+      return(x < quantile(x, 0.25) - 1.5 * IQR(x) |
+               x > quantile(x, 0.75) + 1.5 * IQR(x))
+      }
+```
+
+```{r "Import data", message=FALSE, warning=FALSE}
+## two ways to get the Morisita Horn Matrix:
+  ## 1. calculation with other microbiome softwares
+  ## 2. use the vegan::vegandist() functions
+
+## 1. Matrix from microbiome explicit
+MH_txt <- 
+  here::here("background",
+             "data",
+             "MH.txt") %>%
+  read_table2()
+
+MAT_RA <- 
+  here::here("background",
+             "data",
+             "Background_Merge_clean.csv") %>%
+  read.csv(row.names = 1,
+           check.names = F)
+
+
+## the covariance matrix is symmetrical
+rownames(MH_txt) = colnames(MH_txt)
+```
+
+```{r "matrix", message=FALSE, warning=FALSE}
+## some samples in the matrix are 
+## not inclued into background research
+## select out the samples we need
+MAT_RA_lq <- MAT_RA %>% 
+  rownames_to_column("Name") %>%
+  select(Name, lq_all)
+
+## make the distance matrix for 
+## the Morisita-Horn dissimilarity
+Dist <- MH_txt %>%
+  filter(rownames(.) %in% rownames(MAT_RA)) %>% 
+  ## only keep the samples we need
+  t() %>% 
+  ## transpose the data.frame
+  as.data.frame() %>% 
+  ## after the t() function
+  ## the data frame is in matrix form
+  filter(rownames(.) %in% rownames(MAT_RA)) %>% 
+  ## only keep the samples we need
+  rownames_to_column("Name") %>%
+  left_join(MAT_RA_lq, "Name") %>% 
+  unite("Name", c("Name", "lq_all")) %>% 
+  ## add the loading information
+  column_to_rownames("Name") %>% 
+  ## so far the loading is in the names
+  t() %>% 
+  ## transpose the data.frame
+  as.data.frame() 
+  ## after the t() function
+  ## the data frame is in matrix form
+
+Dist[lower.tri(Dist)] <- NA 
+## only use the upper triangle
+## the matrix is symmetrical
+
+## the matrix gives us the covariance
+## for each pair of two samples 
+MH <- Dist %>%
+  gather(ColumnName, MH, 
+         colnames(.)[1:ncol(.)], 
+         factor_key = F) %>%
+  ## change the entire matrix 
+  ## into single column long form
+  mutate(RowName = rep(colnames(Dist), 
+        times = ncol(Dist))) %>% 
+  ## the first and second item in the covariance
+  na.omit() %>% 
+  ## remove the upper NA at the lower triangle
+  as.data.frame() %>%
+  filter(MH < 1) %>% 
+  ## remove the variance terms
+  separate(ColumnName, 
+           c("ColumnName", "Loading"), 
+           sep = "_") %>% 
+  ## return the first sample's loading
+  separate(ColumnName, c("Col"), sep = 5) %>% 
+  ## return the first one group (T, H, or N)
+  separate(RowName, c("Row"), sep = 5) %>% 
+  ## the second sample group
+  mutate(ColumnName = Col, RowName = Row) %>% 
+  unite("Pair2", c(ColumnName, RowName), sep=" v.s. ") %>% 
+  ## the paired group
+  separate(Col, "C", sep = 1) %>%
+  separate(Row, "R", sep = 1) %>%
+  unite("Category", c(C, R), sep=" v.s. ") %>% 
+  ## the category of the paired group
+  group_by(Category) %>%
+  mutate(outlier = ifelse(is_outlier(MH), Pair2, "")) 
+  # filter(Category != "T v.s. T")
+
+Dist_remove <- MH_txt %>%
+  filter(rownames(.) %in% rownames(MAT_RA)) %>% 
+  ## only keep the samples we need
+  filter(rownames(.)!= "H2O13") %>%
+  filter(rownames(.)!= "H2O14") %>%
+  t() %>% ## transpose the data.frame
+  as.data.frame() %>% 
+  ## after the t() function
+  ## the data frame is in matrix form
+  filter(rownames(.) %in% rownames(MAT_RA)) %>% 
+  ## only keep the samples we need
+  filter(rownames(.)!= "H2O13") %>%
+  filter(rownames(.)!= "H2O14") %>%
+  rownames_to_column("Name") %>%
+  left_join(MAT_RA_lq, "Name") %>% 
+  unite("Name", c("Name", "lq_all")) %>% 
+  ## add the loading information into the matrix
+  column_to_rownames("Name") %>% 
+  ## so far the loading is already in the names
+  t() %>% ## transpose the data.frame
+  as.data.frame() 
+  ## after the t() function
+  ## the data frame is in matrix form
+
+Dist_remove[lower.tri(Dist_remove)] <- NA 
+## only use the upper triangle, the matrix is symmetrical
+  
+MH_remove <- Dist_remove %>%
+  gather(ColumnName, MH_remove, 
+         colnames(.)[1:ncol(.)], factor_key=T) %>%
+  mutate(RowName = rep(colnames(Dist_remove), 
+          times = ncol(Dist_remove))) %>% 
+  na.omit() %>% 
+  ## remove the upper NA at the lower triangle
+  as.data.frame() %>%
+  filter(MH_remove < 1) %>% ## remove the variance terms
+  separate(ColumnName, 
+           c("ColumnName", "Loading"), 
+           sep="_") %>% 
+  ## return the first sample's loading information
+  separate(ColumnName, c("Col"), sep = 5) %>% 
+  ## return the first one group (T, H, or N)
+  separate(RowName, c("Row"), sep = 5) %>% 
+  ## the second sample group
+  mutate(ColumnName = Col, RowName = Row) %>% 
+  unite("Pair2", c(ColumnName, RowName), sep=" v.s. ") %>% 
+  ## the paired group
+  separate(Col, "C", sep = 1) %>%
+  separate(Row, "R", sep = 1) %>%
+  unite("Category", c(C, R), sep=" v.s. ") %>% 
+  ## the category of the paired group
+  group_by(Category) %>%
+  mutate(outlier = ifelse(is_outlier(MH_remove), Pair2, "")) 
+  ## decide whether each pair covariance is outlier
+
+```
+
+```{r save files, include=FALSE}
+write.csv(MH, "data/Morisita_Horn_Matrix.csv")
+write.csv(MH_remove, "data/Morisita_Horn_RemoveT.csv")
+write.csv(MAT_RA_lq, "data/Background_RA_loading.csv")
+```
+

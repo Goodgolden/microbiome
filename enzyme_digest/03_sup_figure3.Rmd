@@ -1,0 +1,73 @@
+---
+title: "03 FigureS3"
+author: "Randy"
+date: "9/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Supplementary Figure}
+Plot_OPAlpha_Sobs <- OPAlpha %>% 
+  ggplot(aes(x=EnzD, y=`Sobs Median`)) +
+  geom_line(aes(group=ID), col="grey") + 
+  # line graph layer
+  geom_point(aes(col=EnzD)) + 
+  # scatterplot layer
+  ylim(0, 110) +
+  theme_bw() + 
+  # this theme is very neat without the grey background
+  theme(text = element_text(size=15)) +
+  ggthemes::scale_color_wsj("colors6") +
+  ylab("Richness") + 
+  xlab("OP") +
+  scale_x_discrete(labels=c("D" = "EnzD", "N" = "NonD"))  +
+  theme(legend.position = "none")
+
+Plot_SPAlpha_Sobs <- SPAlpha %>%
+  ggplot(aes(x=EnzD, y=`Sobs Median`)) +
+  geom_line(aes(group=ID), col="grey") +
+  geom_point(aes(col=EnzD)) +
+  ylim(0, 110) +
+  theme_bw() +
+  theme(text = element_text(size=15)) +
+  ggthemes::scale_color_wsj("colors6") +
+  ylab("Richness") + 
+  xlab("SP") +
+  scale_x_discrete(labels=c("D" = "EnzD", "N" = "NonD")) +
+  theme(legend.position = "none")
+
+Plot_OPAlpha_ShannonH <-  OPAlpha %>%
+  ggplot(aes(x=EnzD, y=`ShannonH Median`)) +
+  geom_line(aes(group=ID), col="grey") +
+  geom_point(aes(col=EnzD)) +
+  ylim(0, 5) +
+  theme_bw() +
+  theme(text = element_text(size=15)) +
+  ggthemes::scale_color_wsj("colors6") +
+  ylab("Shannon-H") + 
+  xlab("OP") +
+  scale_x_discrete(labels=c("D" = "EnzD", "N" = "NonD")) +
+  theme(legend.position = "none")
+
+Plot_SPAlpha_ShannonH <- SPAlpha %>%
+  ggplot(aes(x=EnzD, y=`ShannonH Median`)) +
+  geom_line(aes(group=ID), col="grey") +
+  geom_point(aes(col=EnzD)) +
+  ylim(0, 5) +
+  theme_bw() +
+  theme(text = element_text(size=15)) +
+  ggthemes::scale_color_wsj("colors6") +
+  ylab("Shannon-H") + 
+  xlab("SP") +
+  scale_x_discrete(labels=c("D" = "EnzD", "N" = "NonD")) +
+  theme(legend.position = "none")
+```
+
+```{r Supplementary FigureS3, fig.height = 5, fig.width = 10}
+grid.arrange(Plot_OPAlpha_Sobs, Plot_SPAlpha_Sobs, 
+             Plot_OPAlpha_ShannonH, Plot_SPAlpha_ShannonH, 
+             ncol = 4, nrow = 1) # grid.arrange() is to put four panels together
+```
