@@ -196,12 +196,15 @@ colnames(Matrix1) <- colnames(Dist2)
 MDS1_matrix <- Matrix1 - Dist2 
 PCOA_matrix <- Merge_Count %>%
   vegdist(method = "morisita") 
-
+View(vegdist)
 ## get the pcoa/mds by cmdscale(), 
 ## the arguement eig and x.ret will 
 ## provide the composition of the components
 MDS1_result <- MDS1_matrix %>% 
   cmdscale(eig = T, x.ret = T)
+
+View(cmdscale)
+
 
 PCOA_result <- PCOA_matrix %>%  
   cmdscale(eig = T, x.ret = T) 
